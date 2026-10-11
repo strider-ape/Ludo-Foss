@@ -35,3 +35,9 @@ Thumbs.db
 *.unitypackage
 crashlytics-build.properties
 sysinfo.txt
+
+# Release signing (keep private)
+*.keystore
+*.jks
+*.p12
+signing.properties

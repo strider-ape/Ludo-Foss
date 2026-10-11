@@ -22,6 +22,8 @@ namespace LudoGame.EditorTools
             PlayerSettings.defaultScreenHeight = 960;
             PlayerSettings.resizableWindow = true;
             PlayerSettings.runInBackground = true;
+            BuildAndroid.DisableSplash();
+            AppIcon.Apply();
 
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {

@@ -8,7 +8,8 @@ using UnityEngine;
 namespace LudoGame.EditorTools
 {
     /// <summary>
-    /// One-click Android build. From the command line:
+    /// One-click Android build: applies the icon, signs with the release key when present (see ReleaseSigning),
+    /// and fails if the privacy check finds extra permissions or tracking code. From the command line:
     /// Unity.exe -batchmode -quit -projectPath . -buildTarget Android -executeMethod LudoGame.EditorTools.BuildAndroid.Build
     /// </summary>
     public static class BuildAndroid
@@ -21,19 +22,44 @@ namespace LudoGame.EditorTools
         {
             EnsureScene();
             ConfigurePlayer();
+            AppIcon.Apply();
+            bool releaseSigned = ReleaseSigning.Configure();
+            Debug.Log(releaseSigned ? "[Ludo] Signing with the release key" : "[Ludo] No release key found: this APK will be debug-signed");
 
             Directory.CreateDirectory(Path.GetDirectoryName(OutputPath));
-            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            BuildReport report;
+            try
             {
-                scenes = new[] { ScenePath },
-                locationPathName = OutputPath,
-                target = BuildTarget.Android,
-                options = BuildOptions.None,
-            });
+                report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { ScenePath },
+                    locationPathName = OutputPath,
+                    target = BuildTarget.Android,
+                    options = BuildOptions.None,
+                });
+            }
+            finally
+            {
+                ReleaseSigning.Clear();
+            }
 
             var summary = report.summary;
-            Debug.Log($"[Ludo] Build {summary.result}: {summary.outputPath} ({summary.totalSize / (1024 * 1024)} MB, {summary.totalErrors} errors)");
-            if (Application.isBatchMode) EditorApplication.Exit(summary.result == BuildResult.Succeeded ? 0 : 1);
+            bool ok = summary.result == BuildResult.Succeeded;
+            Debug.Log($"[Ludo] Build {summary.result}: {summary.outputPath} ({summary.totalErrors} errors)");
+            if (ok)
+            {
+                ok = PrivacyGuard.Check(OutputPath, AppInfo.AndroidId, PrivacyGuard.FindAapt(), out var privacy);
+                if (ok)
+                {
+                    Debug.Log(privacy);
+                }
+                else
+                {
+                    Debug.LogError(privacy);
+                    File.Delete(OutputPath);
+                }
+            }
+            if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
         }
 
         /// <summary>The game builds its UI from code, so the scene only has to exist.</summary>
@@ -58,7 +84,16 @@ namespace LudoGame.EditorTools
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64 | AndroidArchitecture.ARMv7;
+            PlayerSettings.Android.forceInternetPermission = false;
             EditorUserBuildSettings.buildAppBundle = false;
+            DisableSplash();
+        }
+
+        /// <summary>No "Made with Unity" splash: the game opens straight to the menu.</summary>
+        public static void DisableSplash()
+        {
+            PlayerSettings.SplashScreen.show = false;
+            PlayerSettings.SplashScreen.showUnityLogo = false;
         }
     }
 }

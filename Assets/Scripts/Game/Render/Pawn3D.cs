@@ -10,7 +10,8 @@ namespace LudoGame
     /// </summary>
     public sealed class Pawn3D : MonoBehaviour
     {
-        static readonly Vector2[] Profile = BuildProfile();
+        /// <summary>Side profile of the pawn (radius, height); also used to draw the app icon.</summary>
+        public static readonly Vector2[] Profile = BuildProfile();
         static Mesh bodyMesh;
         static Mesh quad;
         static Material[] bodyMaterials;

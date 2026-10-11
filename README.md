@@ -64,6 +64,27 @@ Unity.exe -batchmode -quit -projectPath . -buildTarget Android -executeMethod Lu
 
 The APK is written to `Builds/LudoFOSS.apk`.
 
+Every Android build runs a **privacy check** on the finished APK and fails if it finds any permission other than vibration, or code from known ad, analytics, attribution or crash-reporting SDKs (Firebase, AdMob, Facebook, AppLovin, Unity Ads and many more). You can point it at any APK to compare:
+
+```
+Unity.exe -batchmode -quit -projectPath . -executeMethod LudoGame.EditorTools.PrivacyGuard.CheckApk -apk path\to\other.apk -logFile guard.log
+```
+
+### Release signing (maintainers)
+
+Release builds are signed with the project's permanent key, which is **not** in this repository. The build looks for `%USERPROFILE%\.ludofoss\signing.properties` (or the file named by the `LUDO_SIGNING` environment variable):
+
+```
+storeFile=ludofoss-release.keystore
+storePassword=...
+keyAlias=ludofoss
+keyPassword=...
+```
+
+Without it the build still works, but the APK is debug-signed and can't update an installed release build.
+
+The app icon is drawn in code: **Ludo > Generate App Icon** writes the PNGs in `Assets/Icons`.
+
 ## Test the rules
 
 **Ludo > Run Self Test**, or:
