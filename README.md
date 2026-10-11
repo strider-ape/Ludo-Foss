@@ -2,6 +2,10 @@
 
 A free, open-source Ludo game for Android. 3D board, smooth animations, your own speed, and nothing else: no ads, no accounts, no tracking, no internet.
 
+## Download
+
+**[Get the latest APK from Releases](https://github.com/strider-ape/Ludo-Foss/releases/latest)** (Android 7.1+). Open it on your phone and allow "Install unknown apps" when asked.
+
 <p>
   <img src="docs/menu.png" width="200" alt="Main menu">
   <img src="docs/match.png" width="200" alt="Choosing a move, with the landing preview and turn timer">
