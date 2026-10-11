@@ -6,7 +6,62 @@ namespace LudoGame
     /// <summary>Generates every sprite the game uses at runtime, so the project needs no image assets.</summary>
     public static class SpriteFactory
     {
-        static Sprite square, circle, ring, star, rounded, face;
+        static Sprite square, circle, ring, star, rounded, face, shield, burst, crown;
+
+        /// <summary>Safe-square hint.</summary>
+        public static Sprite Shield => shield != null ? shield : shield = Polygon(new[]
+        {
+            new Vector2(-0.75f, 0.78f), new Vector2(0f, 0.95f), new Vector2(0.75f, 0.78f), new Vector2(0.75f, 0.1f),
+            new Vector2(0.68f, -0.22f), new Vector2(0.45f, -0.6f), new Vector2(0f, -0.95f), new Vector2(-0.45f, -0.6f),
+            new Vector2(-0.68f, -0.22f), new Vector2(-0.75f, 0.1f),
+        });
+
+        /// <summary>Capture hint: a spiky "pow" burst.</summary>
+        public static Sprite Burst => burst != null ? burst : burst = Polygon(StarPolygon(10, 0.95f, 0.55f));
+
+        public static Sprite Crown => crown != null ? crown : crown = Polygon(new[]
+        {
+            new Vector2(-0.9f, -0.6f), new Vector2(0.9f, -0.6f), new Vector2(0.95f, 0.55f), new Vector2(0.48f, 0.02f),
+            new Vector2(0f, 0.78f), new Vector2(-0.48f, 0.02f), new Vector2(-0.95f, 0.55f),
+        });
+
+        static Vector2[] StarPolygon(int points, float outer, float inner)
+        {
+            var pts = new Vector2[points * 2];
+            for (int k = 0; k < pts.Length; k++)
+            {
+                float radius = k % 2 == 0 ? outer : inner;
+                float angle = Mathf.PI / 2f + k * Mathf.PI / points;
+                pts[k] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+            }
+            return pts;
+        }
+
+        /// <summary>A white, anti-aliased filled polygon (points in -1..1, y up).</summary>
+        static Sprite Polygon(Vector2[] pts) => Make(128, (x, y) =>
+        {
+            const int samples = 4;
+            const float step = 2f / 128f / samples;
+            int inside = 0;
+            for (int sy = 0; sy < samples; sy++)
+            {
+                for (int sx = 0; sx < samples; sx++)
+                {
+                    if (InPolygon(pts, x + (sx - 1.5f) * step, y + (sy - 1.5f) * step)) inside++;
+                }
+            }
+            return inside / (float)(samples * samples);
+        });
+
+        static bool InPolygon(Vector2[] pts, float x, float y)
+        {
+            bool inside = false;
+            for (int i = 0, j = pts.Length - 1; i < pts.Length; j = i++)
+            {
+                if ((pts[i].y > y) != (pts[j].y > y) && x < (pts[j].x - pts[i].x) * (y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) inside = !inside;
+            }
+            return inside;
+        }
         static Texture2D diceAtlas, radialShadow, table;
 
         public static Sprite Square => square != null ? square : square = Make(8, (x, y) => 1f);

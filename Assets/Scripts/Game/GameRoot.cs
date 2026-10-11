@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using LudoGame.Core;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -19,6 +20,8 @@ namespace LudoGame
     public sealed class GameRoot : MonoBehaviour
     {
         static readonly Color PlayGreen = new Color(0.17f, 0.75f, 0.35f);
+        static readonly Color Silver = new Color(0.78f, 0.82f, 0.87f);
+        static readonly Color Bronze = new Color(0.82f, 0.54f, 0.31f);
 
         RectTransform canvas;
         RectTransform screen;
@@ -64,7 +67,7 @@ namespace LudoGame
 
             // Android back button.
             if (!Input.GetKeyDown(KeyCode.Escape)) return;
-            if (overlay != null && Time.timeScale == 0f) CloseSettings();
+            if (overlay != null && overlay.name == "Settings") CloseSettings();
             else if (match != null && overlay == null) OpenSettings();
             else if (match == null && overlay == null) Application.Quit();
         }
@@ -123,8 +126,18 @@ namespace LudoGame
             Ui.Label(screen, "Tap a colour to switch Player / Computer / Off", 30, new Color(1f, 1f, 1f, 0.55f), new Vector2(1000, 44), new Vector2(0, -205), TextAnchor.MiddleCenter, shadow: false);
 
             BuildSpeedRow(screen, -350);
-            Ui.Button(screen, "PLAY", PlayGreen, new Vector2(620, 170), new Vector2(0, -560), StartMatch, 84);
-            Ui.Button(screen, "SETTINGS", Palette.ButtonMuted, new Vector2(420, 96), new Vector2(0, -760), OpenSettings, 40);
+            bool canContinue = GameSettings.ResumeGames && SaveGame.Exists;
+            if (canContinue)
+            {
+                Ui.Button(screen, "CONTINUE", PlayGreen, new Vector2(620, 150), new Vector2(0, -545), ContinueMatch, 76);
+                Ui.Button(screen, "NEW GAME", Palette.Button, new Vector2(500, 110), new Vector2(0, -705), () => StartMatch(null), 50);
+                Ui.Button(screen, "SETTINGS", Palette.ButtonMuted, new Vector2(420, 90), new Vector2(0, -835), OpenSettings, 38);
+            }
+            else
+            {
+                Ui.Button(screen, "PLAY", PlayGreen, new Vector2(620, 170), new Vector2(0, -560), () => StartMatch(null), 84);
+                Ui.Button(screen, "SETTINGS", Palette.ButtonMuted, new Vector2(420, 96), new Vector2(0, -760), OpenSettings, 40);
+            }
         }
 
         Color SeatColor(PlayerColor c) => seats[(int)c] == SeatType.Off ? Palette.ButtonMuted : Palette.Of(c);
@@ -135,24 +148,31 @@ namespace LudoGame
             return Palette.Name(c) + "  -  " + who;
         }
 
-        void StartMatch()
+        void ContinueMatch()
         {
-            int active = 0;
-            foreach (var s in seats) if (s != SeatType.Off) active++;
-            if (active < 2) return;
+            var saved = SaveGame.Load();
+            if (saved == null)
+            {
+                ShowMenu();
+                return;
+            }
+            StartMatch(saved);
+        }
+
+        void StartMatch(GameState restored)
+        {
+            if (restored == null)
+            {
+                int active = 0;
+                foreach (var s in seats) if (s != SeatType.Off) active++;
+                if (active < 2) return;
+            }
 
             ClearScreen();
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
-            match = Match.Create(canvas, board, rig, (SeatType[])seats.Clone(), OpenSettings);
+            match = Match.Create(canvas, board, rig, (SeatType[])seats.Clone(), restored, OpenSettings);
             screen = (RectTransform)match.transform;
-            match.Won += ShowWinner;
-        }
-
-        /// <summary>Starts a computer-only match without changing the saved seats (used by DemoCapture).</summary>
-        internal void StartDemoMatch()
-        {
-            for (int p = 0; p < GameState.Players; p++) seats[p] = SeatType.Computer;
-            StartMatch();
+            match.GameOver += ShowResults;
         }
 
         // ---------- Settings ----------
@@ -162,18 +182,35 @@ namespace LudoGame
             if (overlay != null) return;
             if (match != null) Time.timeScale = 0f;
             bool inMatch = match != null;
-            overlay = MakeOverlay("Settings", inMatch ? 1340 : 1200);
+            float cardHeight = inMatch ? 1500f : 1360f;
+            overlay = MakeOverlay("Settings", cardHeight);
             var card = overlay.GetChild(0);
-            float top = inMatch ? 560 : 490;
-            Ui.Label(card, inMatch ? "PAUSED" : "SETTINGS", 78, Palette.Text, new Vector2(800, 100), new Vector2(0, top));
-            BuildSpeedRow(card, top - 150);
-            BuildToggle(card, top - 290, "Auto-move", () => GameSettings.AutoMove, v => GameSettings.AutoMove = v);
-            BuildToggle(card, top - 410, "Three 6s skip turn", () => GameSettings.ThreeSixesRule, v => GameSettings.ThreeSixesRule = v);
-            BuildToggle(card, top - 530, "Sound", () => GameSettings.Sound, v => GameSettings.Sound = v);
-            BuildToggle(card, top - 650, "Vibration", () => GameSettings.Vibration, v => GameSettings.Vibration = v);
-            BuildToggle(card, top - 770, "Battery saver", () => GameSettings.BatterySaver, v => GameSettings.BatterySaver = v);
-            Ui.Button(card, inMatch ? "RESUME" : "DONE", PlayGreen, new Vector2(640, 130), new Vector2(0, top - 930), CloseSettings, 56);
-            if (inMatch) Ui.Button(card, "QUIT TO MENU", Palette.ButtonMuted, new Vector2(640, 110), new Vector2(0, top - 1080), ShowMenu, 44);
+            float top = cardHeight * 0.5f;
+            Ui.Label(card, inMatch ? "PAUSED" : "SETTINGS", 78, Palette.Text, new Vector2(800, 100), new Vector2(0, top - 85));
+
+            const float viewportHeight = 1000f;
+            float viewportY = top - 150f - viewportHeight * 0.5f;
+            var rows = new SettingsRows(card, new Vector2(860f, viewportHeight), new Vector2(0f, viewportY));
+            rows.Speed();
+            rows.Header("GAMEPLAY");
+            rows.Toggle("Auto-move", () => GameSettings.AutoMove, v => GameSettings.AutoMove = v);
+            rows.Toggle("Three 6s skip turn", () => GameSettings.ThreeSixesRule, v => GameSettings.ThreeSixesRule = v);
+            rows.Toggle("Play for all places", () => GameSettings.PlayForPlaces, v => GameSettings.PlayForPlaces = v);
+            rows.Header("HELPERS");
+            rows.Cycle("Move preview", new[] { "Off", "Marker", "Marker + path" }, () => (int)GameSettings.Preview, i => GameSettings.Preview = (PreviewMode)i);
+            rows.Cycle("Turn timer", new[] { "Off", "10s", "15s", "30s" },
+                () => System.Array.IndexOf(GameSettings.TimerChoices, GameSettings.TurnTimer), i => GameSettings.TurnTimer = GameSettings.TimerChoices[i]);
+            rows.Cycle("When time runs out", new[] { "Skip turn", "Auto-play" }, () => GameSettings.TimerAutoPlays ? 1 : 0, i => GameSettings.TimerAutoPlays = i == 1);
+            rows.Toggle("Resume unfinished game", () => GameSettings.ResumeGames, v => GameSettings.ResumeGames = v);
+            rows.Header("SOUND & DEVICE");
+            rows.Toggle("Sound", () => GameSettings.Sound, v => GameSettings.Sound = v);
+            rows.Toggle("Vibration", () => GameSettings.Vibration, v => GameSettings.Vibration = v);
+            rows.Toggle("Battery saver", () => GameSettings.BatterySaver, v => GameSettings.BatterySaver = v);
+            rows.Finish();
+
+            float buttonsY = viewportY - viewportHeight * 0.5f - 105f;
+            Ui.Button(card, inMatch ? "RESUME" : "DONE", PlayGreen, new Vector2(640, 125), new Vector2(0, buttonsY), CloseSettings, 54);
+            if (inMatch) Ui.Button(card, "QUIT TO MENU", Palette.ButtonMuted, new Vector2(640, 105), new Vector2(0, buttonsY - 140), ShowMenu, 42);
         }
 
         void CloseSettings()
@@ -182,19 +219,45 @@ namespace LudoGame
             overlay = null;
             Time.timeScale = 1f;
             FrameGovernor.Keep(0.3f);
+            if (match == null) ShowMenu(); // refresh, e.g. CONTINUE appears or disappears with "Resume unfinished game"
         }
 
-        // ---------- Winner ----------
+        // ---------- Results ----------
 
-        void ShowWinner(PlayerColor winner)
+        void ShowResults(List<Match.Placing> placings)
         {
-            overlay = MakeOverlay("Winner", 700);
+            overlay = MakeOverlay("Results", 1240);
             var card = overlay.GetChild(0);
-            Ui.Avatar(card, Palette.Of(winner), 150f, new Vector2(0, 230));
-            Ui.Label(card, Palette.Name(winner) + " WINS!", 104, Palette.Of(winner), new Vector2(840, 140), new Vector2(0, 70))
+            var winner = placings[0];
+            string title = winner.Human && winner.Name == "You" ? "YOU WIN!" : winner.Name.ToUpperInvariant() + " WINS!";
+            Ui.Label(card, title, 96, Palette.Of(winner.Color), new Vector2(860, 130), new Vector2(0, 500))
                 .gameObject.AddComponent<Outline>().effectColor = new Color(1f, 1f, 1f, 0.85f);
-            Ui.Button(card, "PLAY AGAIN", PlayGreen, new Vector2(640, 130), new Vector2(0, -100), StartMatch, 56);
-            Ui.Button(card, "MENU", Palette.ButtonMuted, new Vector2(640, 110), new Vector2(0, -250), ShowMenu, 44);
+
+            // Podium: 2nd on the left, 1st in the middle, 3rd on the right.
+            const float baseY = -140f;
+            int[] places = { 1, 0, 2 };
+            float[] xs = { -290f, 0f, 290f };
+            float[] heights = { 200f, 290f, 150f };
+            Color[] medals = { Silver, Palette.Gold, Bronze };
+            for (int k = 0; k < 3; k++)
+            {
+                int place = places[k];
+                if (place >= placings.Count) continue;
+                var entry = placings[place];
+                var step = Ui.Image("Step", card, SpriteFactory.Rounded, medals[k], new Vector2(250f, heights[k]), new Vector2(xs[k], baseY + heights[k] * 0.5f), sliced: true);
+                Ui.Label(step.transform, (place + 1).ToString(), 96, Color.white, new Vector2(250f, heights[k]), Vector2.zero);
+                float avatarY = baseY + heights[k] + 80f;
+                Ui.Avatar(card, Palette.Of(entry.Color), 130f, new Vector2(xs[k], avatarY));
+                if (place == 0) Ui.Image("Crown", card, SpriteFactory.Crown, Palette.Gold, new Vector2(92f, 92f), new Vector2(xs[k], avatarY + 98f));
+                Ui.Label(card, entry.Name, 38, Color.white, new Vector2(270f, 50f), new Vector2(xs[k], baseY - 40f));
+            }
+            if (placings.Count > 3)
+            {
+                Ui.Label(card, "4th   " + placings[3].Name, 36, new Color(1f, 1f, 1f, 0.7f), new Vector2(700f, 50f), new Vector2(0f, baseY - 110f), TextAnchor.MiddleCenter, shadow: false);
+            }
+
+            Ui.Button(card, "PLAY AGAIN", PlayGreen, new Vector2(640, 130), new Vector2(0, -400), () => StartMatch(null), 56);
+            Ui.Button(card, "MENU", Palette.ButtonMuted, new Vector2(640, 110), new Vector2(0, -545), ShowMenu, 44);
         }
 
         // ---------- Shared widgets ----------
@@ -205,7 +268,7 @@ namespace LudoGame
             var dim = root.gameObject.AddComponent<Image>();
             dim.color = Palette.Overlay;
             dim.raycastTarget = true;
-            Ui.Image("Card", root, SpriteFactory.Rounded, Palette.Card, new Vector2(900, cardHeight), Vector2.zero, sliced: true);
+            Ui.Image("Card", root, SpriteFactory.Rounded, Palette.Card, new Vector2(920, cardHeight), Vector2.zero, sliced: true);
             FrameGovernor.Keep(0.3f);
             return root;
         }
@@ -226,17 +289,127 @@ namespace LudoGame
             }, 76);
         }
 
-        static void BuildToggle(Transform parent, float y, string name, System.Func<bool> get, System.Action<bool> set)
+        /// <summary>A scrolling list of settings rows, laid out top to bottom.</summary>
+        sealed class SettingsRows
         {
-            Button button = null;
-            button = Ui.Button(parent, ToggleText(name, get()), get() ? Palette.Button : Palette.ButtonMuted, new Vector2(760, 100), new Vector2(0, y), () =>
+            const float ToggleHeight = 100f;
+            const float Spacing = 18f;
+
+            readonly RectTransform content;
+            readonly List<(RectTransform rt, float top)> placed = new List<(RectTransform, float)>();
+            float cursor;
+
+            public SettingsRows(Transform parent, Vector2 size, Vector2 pos)
             {
-                set(!get());
-                Ui.SetText(button, ToggleText(name, get()));
-                Ui.SetColor(button, get() ? Palette.Button : Palette.ButtonMuted);
-            }, 42);
+                var viewport = Ui.Rect("Viewport", parent, size, pos);
+                viewport.gameObject.AddComponent<RectMask2D>();
+                var hit = viewport.gameObject.AddComponent<Image>();
+                hit.color = new Color(0f, 0f, 0f, 0f);
+                hit.raycastTarget = true;
+                content = Ui.Rect("Content", viewport, new Vector2(size.x, size.y), Vector2.zero);
+                content.anchorMin = content.anchorMax = new Vector2(0.5f, 1f);
+                content.pivot = new Vector2(0.5f, 1f);
+                content.anchoredPosition = Vector2.zero;
+                var scroll = viewport.gameObject.AddComponent<ScrollRect>();
+                scroll.content = content;
+                scroll.viewport = viewport;
+                scroll.horizontal = false;
+                scroll.vertical = true;
+                scroll.movementType = ScrollRect.MovementType.Elastic;
+                scroll.scrollSensitivity = 40f;
+                scroll.decelerationRate = 0.12f;
+                viewport.gameObject.AddComponent<ScrollKeepAwake>().Init(scroll);
+            }
+
+            /// <summary>Reserves a slot of the given height and returns its top edge (distance from the content top).</summary>
+            float Next(float height)
+            {
+                float top = cursor;
+                cursor += height + Spacing;
+                return top;
+            }
+
+            void Place(RectTransform rt, float top, float height)
+            {
+                placed.Add((rt, top + height * 0.5f));
+            }
+
+            public void Speed()
+            {
+                var holder = Ui.Rect("SpeedRow", content, new Vector2(860f, 180f), Vector2.zero);
+                BuildSpeedRow(holder, -30f);
+                Place(holder, Next(180f), 180f);
+            }
+
+            public void Header(string text)
+            {
+                var label = Ui.Label(content, text, 34, Palette.Gold, new Vector2(800f, 56f), Vector2.zero, TextAnchor.MiddleCenter, shadow: false);
+                Place(label.rectTransform, Next(56f), 56f);
+            }
+
+            public void Toggle(string name, System.Func<bool> get, System.Action<bool> set)
+            {
+                Button button = null;
+                button = Ui.Button(content, ToggleText(name, get()), get() ? Palette.Button : Palette.ButtonMuted, new Vector2(760f, ToggleHeight), Vector2.zero, () =>
+                {
+                    set(!get());
+                    Ui.SetText(button, ToggleText(name, get()));
+                    Ui.SetColor(button, get() ? Palette.Button : Palette.ButtonMuted);
+                }, 40);
+                Place((RectTransform)button.transform, Next(ToggleHeight), ToggleHeight);
+            }
+
+            /// <summary>A button that steps through several options each time it is tapped.</summary>
+            public void Cycle(string name, string[] options, System.Func<int> get, System.Action<int> set)
+            {
+                Button button = null;
+                string Caption() => name + ":  " + options[Mathf.Clamp(get(), 0, options.Length - 1)];
+                Color Shade() => get() == 0 ? Palette.ButtonMuted : Palette.Button;
+                button = Ui.Button(content, Caption(), Shade(), new Vector2(760f, ToggleHeight), Vector2.zero, () =>
+                {
+                    set((Mathf.Clamp(get(), 0, options.Length - 1) + 1) % options.Length);
+                    Ui.SetText(button, Caption());
+                    Ui.SetColor(button, Shade());
+                }, 40);
+                Place((RectTransform)button.transform, Next(ToggleHeight), ToggleHeight);
+            }
+
+            /// <summary>Sizes the content to fit the rows and positions them from the top.</summary>
+            public void Finish()
+            {
+                float height = cursor + 20f;
+                content.sizeDelta = new Vector2(content.sizeDelta.x, height);
+                foreach (var (rt, centre) in placed) rt.anchoredPosition = new Vector2(0f, height * 0.5f - centre);
+            }
         }
 
         static string ToggleText(string name, bool on) => name + ":  " + (on ? "ON" : "OFF");
+
+        // ---------- Hooks for DemoCapture (desktop screenshots) ----------
+
+        internal Match CurrentMatch => match;
+
+        internal void DemoStartMatch(SeatType[] demoSeats)
+        {
+            for (int p = 0; p < GameState.Players; p++) seats[p] = demoSeats[p];
+            StartMatch(null);
+        }
+
+        internal void DemoOpenSettings() => OpenSettings();
+
+        internal void DemoCloseSettings() => CloseSettings();
+    }
+
+    /// <summary>Keeps rendering at full rate while a list is still scrolling after the finger lifts.</summary>
+    public sealed class ScrollKeepAwake : MonoBehaviour
+    {
+        ScrollRect scroll;
+
+        public void Init(ScrollRect scroll) => this.scroll = scroll;
+
+        void Update()
+        {
+            if (scroll != null && scroll.velocity.sqrMagnitude > 4f) FrameGovernor.Keep(0.1f);
+        }
     }
 }

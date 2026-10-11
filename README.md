@@ -3,9 +3,10 @@
 A free, open-source Ludo game for Android. 3D board, smooth animations, your own speed, and nothing else: no ads, no accounts, no tracking, no internet.
 
 <p>
-  <img src="docs/menu.png" width="240" alt="Main menu">
-  <img src="docs/match.png" width="240" alt="A match in progress">
-  <img src="docs/winner.png" width="240" alt="Winner screen">
+  <img src="docs/menu.png" width="200" alt="Main menu">
+  <img src="docs/match.png" width="200" alt="Choosing a move, with the landing preview and turn timer">
+  <img src="docs/winner.png" width="200" alt="Results podium">
+  <img src="docs/settings.png" width="200" alt="Settings">
 </p>
 
 ## Features
@@ -14,9 +15,17 @@ A free, open-source Ludo game for Android. 3D board, smooth animations, your own
 - **Speed control** from 1x (classic pace) up to **Instant**, adjustable mid-game
 - **Play vs computer**: any colour can be a bot
 - **Pass & play**: 2 to 4 people on one phone; your colour is turned to the bottom-left
+- **Classic rules**: a 6 to leave base, an extra turn on a 6, a capture or reaching home, safe star squares, an exact roll to finish
+
+Every helper below can be switched on or off in Settings:
+
+- **Move preview**: before you choose, each pawn's landing square lights up, with a dotted route. A red burst means that move captures someone; a shield means a safe square; a crown means home
+- **Play for all places**: after the winner, keep going for 2nd and 3rd and finish on a podium. **Skip to results** finishes a computers-only ending instantly
+- **Resume**: the game saves after every turn, so **Continue** picks up where you left off, even after the app was closed
+- **Turn timer** (off by default): 10, 15 or 30 seconds, shown as a ring around your avatar. When it runs out, the game either plays the move for you or skips the turn
 - **Auto-move**: when only one move is possible, it happens by itself
-- **Sound and vibration**, each switchable
-- Classic rules: a 6 to leave base, an extra turn on a 6, a capture or reaching home, safe star squares, an exact roll to finish, and an optional rule where three 6s in a row lose the turn
+- **Three 6s in a row lose the turn**
+- **Sound**, **vibration** and **battery saver**
 
 ## Privacy and battery
 

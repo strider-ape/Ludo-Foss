@@ -21,6 +21,8 @@ namespace LudoGame.EditorTools
             CheckGeometry();
             CheckRules();
             Simulate(400);
+            CheckPlayOut();
+            CheckSaveRoundTrip();
             Debug.Log(failures == 0 ? "[Ludo] SELF TEST PASSED" : $"[Ludo] SELF TEST FAILED ({failures} failures)");
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
@@ -120,46 +122,89 @@ namespace LudoGame.EditorTools
                     }
                 }
 
+                // Play for all places, the way a match does by default.
                 var s = new GameState(seats);
                 int turns = 0;
-                bool won = false;
-                while (!won && turns++ < 20000)
+                while (!s.IsOver && turns++ < 40000)
                 {
                     var p = s.Current;
                     int roll = rng.Next(1, 7);
                     s.ConsecutiveSixes = roll == 6 ? s.ConsecutiveSixes + 1 : 0;
                     if (s.ConsecutiveSixes == 3)
                     {
-                        s.ConsecutiveSixes = 0;
-                        s.Current = s.NextPlayer(p);
+                        s.PassTurn();
                         continue;
                     }
                     var moves = Rules.LegalMoves(s, p, roll);
                     if (moves.Count == 0)
                     {
-                        if (roll != 6)
-                        {
-                            s.ConsecutiveSixes = 0;
-                            s.Current = s.NextPlayer(p);
-                        }
+                        if (roll != 6) s.PassTurn();
                         continue;
                     }
                     var move = bot.Choose(s, moves, roll);
                     Check(moves.Contains(move), "bot picks a legal move");
                     var result = Rules.Apply(s, move);
                     if (!Validate(s)) return;
-                    won = result.Won;
-                    if (!won && !Rules.GrantsExtraTurn(roll, result))
+                    if (result.Finished)
                     {
-                        s.ConsecutiveSixes = 0;
-                        s.Current = s.NextPlayer(p);
+                        Check(s.Finished[s.Finished.Count - 1] == p, "finishers are recorded in order");
+                        s.PassTurn();
+                        Check(s.IsOver || !s.HasFinished(s.Current), "a finished player never gets another turn");
+                        continue;
                     }
+                    if (!Rules.GrantsExtraTurn(roll, result)) s.PassTurn();
                 }
-                Check(won, $"game {g} finishes");
-                if (won) finished++;
+                Check(s.IsOver, $"game {g} decides every place");
+                if (s.IsOver) finished++;
+                Check(s.Ranking().Count == active && new HashSet<PlayerColor>(s.Ranking()).Count == active, $"game {g} ranks each player once");
                 totalTurns += turns;
             }
-            Debug.Log($"[Ludo] Simulated {games} games, {finished} finished, {totalTurns / Math.Max(1, games)} rolls on average");
+            Debug.Log($"[Ludo] Simulated {games} games, {finished} decided, {totalTurns / Math.Max(1, games)} rolls on average");
+        }
+
+        /// <summary>"Skip to results" plays a game out from the middle and must rank everyone.</summary>
+        static void CheckPlayOut()
+        {
+            var rng = new System.Random(777);
+            var bot = new Bot(rng);
+            for (int g = 0; g < 100; g++)
+            {
+                var s = new GameState(new[] { SeatType.Human, SeatType.Computer, SeatType.Computer, g % 2 == 0 ? SeatType.Computer : SeatType.Off });
+                int active = g % 2 == 0 ? 4 : 3;
+                AutoPlay.PlayOut(s, bot, rng, true, false, 60);
+                var all = AutoPlay.PlayOut(s, bot, rng, true, true);
+                Check(s.IsOver && all.Count == active && new HashSet<PlayerColor>(all).Count == active, $"play-out {g} ranks every player once");
+
+                var quick = new GameState(new[] { SeatType.Computer, SeatType.Computer, SeatType.Computer, SeatType.Computer });
+                var first = AutoPlay.PlayOut(quick, bot, rng, true, false);
+                Check(quick.Finished.Count == 1 && first[0] == quick.Finished[0] && first.Count == 4, $"first-winner play-out {g} stops at one winner");
+            }
+        }
+
+        /// <summary>A saved game must come back exactly as it was.</summary>
+        static void CheckSaveRoundTrip()
+        {
+            var rng = new System.Random(4242);
+            var bot = new Bot(rng);
+            for (int g = 0; g < 50; g++)
+            {
+                var s = new GameState(new[] { SeatType.Human, SeatType.Computer, g % 3 == 0 ? SeatType.Off : SeatType.Human, SeatType.Computer });
+                AutoPlay.PlayOut(s, bot, rng, true, true, rng.Next(20, 400));
+                if (s.IsOver) continue;
+                var copy = SaveGame.FromJson(SaveGame.ToJson(s));
+                Check(copy != null, $"save {g} loads");
+                if (copy == null) continue;
+                bool same = copy.Current == s.Current && copy.ConsecutiveSixes == s.ConsecutiveSixes && copy.Finished.Count == s.Finished.Count;
+                for (int p = 0; p < GameState.Players; p++)
+                {
+                    same &= copy.Seats[p] == s.Seats[p];
+                    for (int t = 0; t < GameState.TokensPerPlayer; t++) same &= copy.Get((PlayerColor)p, t) == s.Get((PlayerColor)p, t);
+                }
+                for (int i = 0; i < s.Finished.Count; i++) same &= copy.Finished[i] == s.Finished[i];
+                Check(same, $"save {g} round-trips exactly");
+            }
+            Check(SaveGame.FromJson("not json") == null, "a corrupt save is ignored");
+            Check(SaveGame.FromJson("{\"version\":99}") == null, "a save from another version is ignored");
         }
 
         /// <summary>Progress stays in range, and no unsafe square holds two different colours.</summary>

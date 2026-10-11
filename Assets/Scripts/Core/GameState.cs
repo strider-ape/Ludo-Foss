@@ -28,6 +28,9 @@ namespace LudoGame.Core
         public PlayerColor Current;
         public int ConsecutiveSixes;
 
+        /// <summary>Players who got all their pawns home, in finishing order.</summary>
+        public readonly List<PlayerColor> Finished = new List<PlayerColor>();
+
         public GameState(IList<SeatType> seats)
         {
             int active = 0;
@@ -57,6 +60,7 @@ namespace LudoGame.Core
             Array.Copy(other.progress, progress, other.progress.Length);
             Current = other.Current;
             ConsecutiveSixes = other.ConsecutiveSixes;
+            Finished.AddRange(other.Finished);
         }
 
         public GameState Clone() => new GameState(this);
@@ -76,6 +80,46 @@ namespace LudoGame.Core
             return true;
         }
 
+        /// <summary>Playing seats that still have pawns to bring home.</summary>
+        public int ActiveUnfinished
+        {
+            get
+            {
+                int n = 0;
+                for (int p = 0; p < Players; p++)
+                {
+                    if (IsActive((PlayerColor)p) && !HasFinished((PlayerColor)p)) n++;
+                }
+                return n;
+            }
+        }
+
+        /// <summary>True once at most one player is left, so every place is decided.</summary>
+        public bool IsOver => ActiveUnfinished <= 1;
+
+        /// <summary>How far a player's pawns have travelled in total (pawns in base count as zero).</summary>
+        public int TotalProgress(PlayerColor c)
+        {
+            int sum = 0;
+            for (int t = 0; t < TokensPerPlayer; t++) sum += progress[(int)c, t] + 1;
+            return sum;
+        }
+
+        /// <summary>Final placings: finishers in order, then everyone else by how far they got.</summary>
+        public List<PlayerColor> Ranking()
+        {
+            var order = new List<PlayerColor>(Finished);
+            var rest = new List<PlayerColor>();
+            for (int p = 0; p < Players; p++)
+            {
+                var c = (PlayerColor)p;
+                if (IsActive(c) && !order.Contains(c)) rest.Add(c);
+            }
+            rest.Sort((a, b) => TotalProgress(b).CompareTo(TotalProgress(a)));
+            order.AddRange(rest);
+            return order;
+        }
+
         /// <summary>Next seat clockwise that is playing and has not finished.</summary>
         public PlayerColor NextPlayer(PlayerColor from)
         {
@@ -85,6 +129,12 @@ namespace LudoGame.Core
                 if (IsActive(c) && !HasFinished(c)) return c;
             }
             return from;
+        }
+
+        public void PassTurn()
+        {
+            ConsecutiveSixes = 0;
+            Current = NextPlayer(Current);
         }
     }
 }

@@ -3,6 +3,8 @@ using UnityEngine;
 
 namespace LudoGame
 {
+    public enum PreviewMode { Off = 0, Marker = 1, MarkerAndPath = 2 }
+
     /// <summary>Player preferences, saved on the device between sessions.</summary>
     public static class GameSettings
     {
@@ -51,6 +53,50 @@ namespace LudoGame
                 SetInt("batterySaver", value ? 1 : 0);
                 FrameGovernor.ApplyTargetFrameRate();
             }
+        }
+
+        /// <summary>How much to show about a move before you choose it.</summary>
+        public static PreviewMode Preview
+        {
+            get => (PreviewMode)Mathf.Clamp(PlayerPrefs.GetInt("preview", (int)PreviewMode.MarkerAndPath), 0, 2);
+            set => SetInt("preview", (int)value);
+        }
+
+        /// <summary>Keep playing for 2nd and 3rd place after someone finishes (off: the first winner ends the game).</summary>
+        public static bool PlayForPlaces
+        {
+            get => PlayerPrefs.GetInt("playForPlaces", 1) == 1;
+            set => SetInt("playForPlaces", value ? 1 : 0);
+        }
+
+        public static bool ResumeGames
+        {
+            get => PlayerPrefs.GetInt("resumeGames", 1) == 1;
+            set
+            {
+                SetInt("resumeGames", value ? 1 : 0);
+                if (!value) SaveGame.Clear();
+            }
+        }
+
+        public static readonly int[] TimerChoices = { 0, 10, 15, 30 };
+
+        /// <summary>Seconds per human turn, or 0 for no timer.</summary>
+        public static int TurnTimer
+        {
+            get
+            {
+                int value = PlayerPrefs.GetInt("turnTimer", 0);
+                return System.Array.IndexOf(TimerChoices, value) >= 0 ? value : 0;
+            }
+            set => SetInt("turnTimer", value);
+        }
+
+        /// <summary>When the timer runs out: play the turn for you (true) or skip it (false).</summary>
+        public static bool TimerAutoPlays
+        {
+            get => PlayerPrefs.GetInt("timerAutoPlays", 1) == 1;
+            set => SetInt("timerAutoPlays", value ? 1 : 0);
         }
 
         public static bool Instant => Speed >= MaxSpeed;

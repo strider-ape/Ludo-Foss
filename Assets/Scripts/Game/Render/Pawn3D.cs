@@ -234,6 +234,15 @@ namespace LudoGame
             ApplyBaseScale(scale);
         }
 
+        /// <summary>Stops any animation and stands the pawn upright on the board.</summary>
+        public void ResetPose()
+        {
+            StopAllCoroutines();
+            Body.localPosition = Vector3.zero;
+            Body.localRotation = Quaternion.identity;
+            ApplyBaseScale(BaseScale);
+        }
+
         public void ApplyBaseScale(float scale)
         {
             BaseScale = scale;

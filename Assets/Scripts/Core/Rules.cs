@@ -24,7 +24,9 @@ namespace LudoGame.Core
     {
         public readonly List<TokenRef> Captured = new List<TokenRef>();
         public bool ReachedHome;
-        public bool Won;
+
+        /// <summary>This move brought the player's last pawn home.</summary>
+        public bool Finished;
     }
 
     /// <summary>Classic Ludo rules: a 6 to leave base, exact roll to finish, captures on unsafe squares.</summary>
@@ -78,8 +80,16 @@ namespace LudoGame.Core
             }
             s.Set(m.Player, m.Token, m.To);
             result.ReachedHome = m.To == BoardLayout.HomeProgress;
-            result.Won = result.ReachedHome && s.HasFinished(m.Player);
+            result.Finished = result.ReachedHome && s.HasFinished(m.Player);
+            if (result.Finished && !s.Finished.Contains(m.Player)) s.Finished.Add(m.Player);
             return result;
+        }
+
+        /// <summary>True if landing on progress <paramref name="to"/> is safe: a star or start square, the home column or home.</summary>
+        public static bool IsSafeLanding(PlayerColor mover, int to)
+        {
+            int g = BoardLayout.GlobalIndex(mover, to);
+            return g < 0 || BoardLayout.IsSafe(g);
         }
 
         public static bool GrantsExtraTurn(int roll, MoveResult r) => roll == 6 || r.Captured.Count > 0 || r.ReachedHome;

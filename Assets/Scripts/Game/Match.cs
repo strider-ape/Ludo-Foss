@@ -10,11 +10,22 @@ namespace LudoGame
 {
     /// <summary>
     /// Runs one game on the 3D board: creates the pawns, die and player cards, then drives the turn loop
-    /// with animations, sounds and vibration.
+    /// with animations, sounds and vibration. Optional helpers: move preview, turn timer, play for places, auto-save.
     /// </summary>
     public sealed class Match : MonoBehaviour
     {
-        public event Action<PlayerColor> Won;
+        public struct Placing
+        {
+            public PlayerColor Color;
+            public string Name;
+            public bool Human;
+        }
+
+        /// <summary>Raised when every place is decided (or the first winner ends the game).</summary>
+        public event Action<List<Placing>> GameOver;
+
+        static Material markerMaterial, discMaterial, dotMaterial, shieldMaterial, burstMaterial, crownMaterial;
+        static Mesh quadMesh;
 
         GameState state;
         Bot bot;
@@ -22,37 +33,49 @@ namespace LudoGame
         CameraRig rig;
         RectTransform canvas;
         Transform pieces;
+        Transform previewRoot;
         Dice3D dice;
         Text hint;
         Text toast;
         Image toastBg;
+        Button skipButton;
         float toastUntil;
         int rotationSteps;
         bool awaitingRoll;
         bool rollRequested;
+        bool picking;
+        int previewDots;
         Pawn3D tapped;
         PlayerColor current;
+        Coroutine loop;
+        float timerDeadline = float.PositiveInfinity;
+        int lastTick;
 
         readonly Pawn3D[,] pawns = new Pawn3D[GameState.Players, GameState.TokensPerPlayer];
         readonly PlayerCard[] cards = new PlayerCard[GameState.Players];
+        readonly string[] names = new string[GameState.Players];
         readonly Vector3[] diceSpots = new Vector3[GameState.Players];
+        readonly List<(Transform marker, int from)> markers = new List<(Transform, int)>();
+        readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
         readonly System.Random rng = new System.Random();
 
-        public static Match Create(RectTransform canvas, Board3D board, CameraRig rig, SeatType[] seats, Action onSettings)
+        /// <summary>Starts a new game, or continues <paramref name="restored"/> if one is given.</summary>
+        public static Match Create(RectTransform canvas, Board3D board, CameraRig rig, SeatType[] seats, GameState restored, Action onSettings)
         {
             var root = Ui.Fill("Match", canvas);
             var match = root.gameObject.AddComponent<Match>();
-            match.Build(canvas, board, rig, seats, onSettings);
+            match.Build(canvas, board, rig, restored ?? new GameState(seats), onSettings);
             return match;
         }
 
-        void Build(RectTransform canvas, Board3D board, CameraRig rig, SeatType[] seats, Action onSettings)
+        void Build(RectTransform canvas, Board3D board, CameraRig rig, GameState game, Action onSettings)
         {
             this.canvas = canvas;
             this.board = board;
             this.rig = rig;
-            state = new GameState(seats);
+            state = game;
             bot = new Bot(rng);
+            var seats = state.Seats;
 
             // Turn the board so the first human player's base is bottom-left, like sitting at a real table.
             rotationSteps = 0;
@@ -73,14 +96,15 @@ namespace LudoGame
             {
                 var c = (PlayerColor)p;
                 bool active = seats[p] != SeatType.Off;
-                string name = seats[p] == SeatType.Computer ? "Computer"
+                names[p] = seats[p] == SeatType.Computer ? "Computer"
                     : seats[p] == SeatType.Off ? "-"
                     : humans == 1 ? "You" : "Player " + (++humanNumber);
                 int seat = p;
-                cards[p] = new PlayerCard(transform, c, name, active, () => OnCardTapped(seat));
+                cards[p] = new PlayerCard(transform, c, names[p], active, () => OnCardTapped(seat));
                 if (!active) continue;
                 for (int t = 0; t < GameState.TokensPerPlayer; t++) pawns[p, t] = Pawn3D.Create(pieces, c, t);
             }
+            for (int i = 0; i < state.Finished.Count; i++) cards[(int)state.Finished[i]].SetPlace(i + 1);
             dice = Dice3D.Create(null);
 
             var pause = Ui.Button(transform, "II", Palette.ButtonMuted, new Vector2(120, 110), Vector2.zero, onSettings, 54);
@@ -89,20 +113,23 @@ namespace LudoGame
             pauseRt.anchoredPosition = new Vector2(-95f, -95f);
 
             hint = Ui.Label(transform, "", 44, new Color(1f, 1f, 1f, 0.9f), new Vector2(1000, 80), Vector2.zero);
-            toastBg = Ui.Image("Toast", transform, SpriteFactory.Rounded, new Color(0.05f, 0.07f, 0.16f, 0.88f), new Vector2(780, 140), Vector2.zero, sliced: true);
-            toast = Ui.Label(toastBg.transform, "", 52, Palette.Text, new Vector2(740, 130), Vector2.zero);
+            skipButton = Ui.Button(transform, "SKIP TO RESULTS", Palette.Button, new Vector2(560, 110), Vector2.zero, OnSkip, 44);
+            skipButton.gameObject.SetActive(false);
+            toastBg = Ui.Image("Toast", transform, SpriteFactory.Rounded, new Color(0.05f, 0.07f, 0.16f, 0.9f), new Vector2(820, 150), Vector2.zero, sliced: true);
+            toast = Ui.Label(toastBg.transform, "", 52, Palette.Text, new Vector2(780, 140), Vector2.zero);
             toastBg.gameObject.SetActive(false);
 
             LayoutUi();
             rig.Reframed += LayoutUi;
             LayoutTokens(0f);
-            StartCoroutine(Loop());
+            loop = StartCoroutine(Loop());
         }
 
         void OnDestroy()
         {
             if (rig != null) rig.Reframed -= LayoutUi;
             if (pieces != null) Destroy(pieces.gameObject);
+            if (previewRoot != null) Destroy(previewRoot.gameObject);
             if (dice != null) Destroy(dice.gameObject);
         }
 
@@ -131,6 +158,7 @@ namespace LudoGame
                 }
             }
             hint.rectTransform.anchoredPosition = new Vector2(0f, lowest - 70f);
+            ((RectTransform)skipButton.transform).anchoredPosition = new Vector2(0f, lowest - 110f);
             toastBg.rectTransform.anchoredPosition = ToCanvas(rig.WorldToScreen(Vector3.zero));
             dice.MoveTo(diceSpots[(int)state.Current], 0f);
         }
@@ -145,13 +173,11 @@ namespace LudoGame
 
         void Update()
         {
-            bool pulsing = dice.IsRollable;
-            foreach (var pawn in pawns)
-            {
-                if (pawn != null && pawn.IsSelectable) pulsing = true;
-            }
+            bool pulsing = dice.IsRollable || picking;
             FrameGovernor.Pulsing = pulsing;
             if (toastBg.gameObject.activeSelf && Time.unscaledTime > toastUntil) toastBg.gameObject.SetActive(false);
+            UpdateTimer();
+            AnimateMarkers();
 
             if (Time.timeScale == 0f || !Input.GetMouseButtonDown(0) || PointerOverUi()) return;
             Vector2 tap = Input.mousePosition;
@@ -162,6 +188,9 @@ namespace LudoGame
                 if ((tap - rig.WorldToScreen(top)).magnitude < radius * 2f) rollRequested = true;
                 return;
             }
+            if (!picking) return;
+
+            // Tap a glowing pawn, or the marker where it would land.
             Pawn3D best = null;
             float bestDistance = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude * 0.9f;
             foreach (var pawn in pawns)
@@ -174,7 +203,26 @@ namespace LudoGame
                     best = pawn;
                 }
             }
+            foreach (var (marker, from) in markers)
+            {
+                float d = (tap - rig.WorldToScreen(marker.position)).magnitude;
+                if (d >= bestDistance) continue;
+                var owner = PawnAt(current, from);
+                if (owner == null) continue;
+                bestDistance = d;
+                best = owner;
+            }
             if (best != null) tapped = best;
+        }
+
+        Pawn3D PawnAt(PlayerColor color, int progress)
+        {
+            for (int t = 0; t < GameState.TokensPerPlayer; t++)
+            {
+                var pawn = pawns[(int)color, t];
+                if (pawn != null && pawn.IsSelectable && state.Get(color, t) == progress) return pawn;
+            }
+            return null;
         }
 
         static bool PointerOverUi()
@@ -202,11 +250,15 @@ namespace LudoGame
             yield return null;
             while (true)
             {
+                if (GameSettings.ResumeGames) SaveGame.Save(state);
                 var p = state.Current;
                 current = p;
                 FocusCard(p);
+                UpdateSkipButton();
                 dice.MoveTo(diceSpots[(int)p], Dur(0.35f));
                 bool human = state.Seats[(int)p] == SeatType.Human;
+                bool timedOut = false;
+                if (human && GameSettings.TurnTimer > 0) StartTimer(GameSettings.TurnTimer);
 
                 if (human)
                 {
@@ -215,10 +267,23 @@ namespace LudoGame
                     rollRequested = false;
                     awaitingRoll = true;
                     dice.SetRollable(true);
-                    while (!rollRequested) yield return null;
+                    while (!rollRequested)
+                    {
+                        if (Time.time >= timerDeadline)
+                        {
+                            timedOut = true;
+                            break;
+                        }
+                        yield return null;
+                    }
                     awaitingRoll = false;
                     dice.SetRollable(false);
                     hint.text = "";
+                    if (timedOut && !GameSettings.TimerAutoPlays)
+                    {
+                        yield return SkipTurnForTime();
+                        continue;
+                    }
                 }
                 else
                 {
@@ -237,23 +302,25 @@ namespace LudoGame
                 state.ConsecutiveSixes = roll == 6 ? state.ConsecutiveSixes + 1 : 0;
                 if (state.ConsecutiveSixes == 3 && GameSettings.ThreeSixesRule)
                 {
+                    StopTimer();
                     Toast("Three 6s in a row!\nTurn lost");
                     yield return Wait(Pause(1f));
-                    PassTurn();
+                    state.PassTurn();
                     continue;
                 }
 
                 var moves = Rules.LegalMoves(state, p, roll);
                 if (moves.Count == 0)
                 {
+                    StopTimer();
                     if (human) Toast(roll == 6 ? "No moves - roll again" : "No moves");
                     yield return Wait(Pause(0.6f));
-                    if (roll != 6) PassTurn();
+                    if (roll != 6) state.PassTurn();
                     continue;
                 }
 
                 Move move;
-                if (!human)
+                if (!human || timedOut)
                 {
                     move = bot.Choose(state, moves, roll);
                 }
@@ -266,12 +333,38 @@ namespace LudoGame
                     hint.text = "Tap a glowing token";
                     tapped = null;
                     foreach (var m in moves) pawns[(int)p, m.Token].SetSelectable(true);
-                    while (tapped == null) yield return null;
+                    ShowPreview(moves);
+                    picking = true;
+                    while (tapped == null)
+                    {
+                        if (Time.time >= timerDeadline)
+                        {
+                            timedOut = true;
+                            break;
+                        }
+                        yield return null;
+                    }
+                    picking = false;
                     ClearSelectable();
+                    ClearPreview();
                     hint.text = "";
-                    int chosen = tapped.Index;
-                    move = moves.Find(m => m.Token == chosen);
+                    if (timedOut && !GameSettings.TimerAutoPlays)
+                    {
+                        yield return SkipTurnForTime();
+                        continue;
+                    }
+                    if (timedOut)
+                    {
+                        move = bot.Choose(state, moves, roll);
+                    }
+                    else
+                    {
+                        int chosen = tapped.Index;
+                        move = moves.Find(m => m.Token == chosen);
+                    }
                 }
+                StopTimer();
+                if (timedOut) Toast("Time's up!\nPlayed for you", 1f);
 
                 yield return AnimateMove(move);
                 var result = Rules.Apply(state, move);
@@ -299,26 +392,220 @@ namespace LudoGame
                 }
                 LayoutTokens(GameSettings.Instant ? 0f : 0.15f);
 
-                if (result.Won)
+                if (result.Finished)
                 {
-                    cards[(int)p].SetStatus("WINNER!");
-                    hint.text = "";
-                    Sfx.Play("win", 0.9f);
-                    Haptics.Tap(60, 255);
-                    Fx.Celebration(new[] { Palette.Of(PlayerColor.Red), Palette.Of(PlayerColor.Green), Palette.Of(PlayerColor.Yellow), Palette.Of(PlayerColor.Blue), Palette.Gold });
-                    yield return Wait(GameSettings.Instant ? 0.3f : 1.1f);
-                    Won?.Invoke(p);
-                    yield break;
+                    int place = state.Finished.Count;
+                    cards[(int)p].SetPlace(place);
+                    if (!GameSettings.PlayForPlaces || state.IsOver)
+                    {
+                        yield return FinishGame();
+                        yield break;
+                    }
+                    Sfx.Play("win", 0.6f);
+                    Haptics.Tap(40, 180);
+                    Toast(DisplayName(p).ToUpperInvariant() + " FINISHED " + Ordinal(place).ToUpperInvariant() + "!", 1.6f);
+                    yield return Wait(Pause(1.2f));
+                    state.PassTurn();
+                    continue;
                 }
-                if (!Rules.GrantsExtraTurn(roll, result)) PassTurn();
+                if (!Rules.GrantsExtraTurn(roll, result)) state.PassTurn();
             }
         }
 
-        void PassTurn()
+        IEnumerator SkipTurnForTime()
         {
-            state.ConsecutiveSixes = 0;
-            state.Current = state.NextPlayer(state.Current);
+            StopTimer();
+            Toast("Time's up!\nTurn skipped");
+            yield return Wait(Pause(0.8f));
+            state.PassTurn();
         }
+
+        IEnumerator FinishGame()
+        {
+            SaveGame.Clear();
+            StopTimer();
+            hint.text = "";
+            skipButton.gameObject.SetActive(false);
+            var ranking = state.Ranking();
+            for (int i = 0; i < ranking.Count; i++) cards[(int)ranking[i]].SetPlace(i + 1);
+            Sfx.Play("win", 0.9f);
+            Haptics.Tap(60, 255);
+            Fx.Celebration(new[] { Palette.Of(PlayerColor.Red), Palette.Of(PlayerColor.Green), Palette.Of(PlayerColor.Yellow), Palette.Of(PlayerColor.Blue), Palette.Gold });
+            yield return Wait(GameSettings.Instant ? 0.3f : 1.1f);
+            var placings = new List<Placing>();
+            foreach (var c in ranking)
+            {
+                placings.Add(new Placing { Color = c, Name = DisplayName(c), Human = state.Seats[(int)c] == SeatType.Human });
+            }
+            GameOver?.Invoke(placings);
+        }
+
+        /// <summary>"You" / "Player 2" for people, the colour name for computers.</summary>
+        string DisplayName(PlayerColor c) => state.Seats[(int)c] == SeatType.Human ? names[(int)c] : Palette.Name(c);
+
+        static string Ordinal(int n) => n == 1 ? "1st" : n == 2 ? "2nd" : n == 3 ? "3rd" : n + "th";
+
+        // ---------- Skip to results ----------
+
+        bool NoHumanLeft
+        {
+            get
+            {
+                for (int p = 0; p < GameState.Players; p++)
+                {
+                    if (state.Seats[p] == SeatType.Human && !state.HasFinished((PlayerColor)p)) return false;
+                }
+                return true;
+            }
+        }
+
+        bool CanSkipToResults => loop != null && !state.IsOver && NoHumanLeft && state.ActiveUnfinished >= 2;
+
+        void UpdateSkipButton() => skipButton.gameObject.SetActive(CanSkipToResults);
+
+        void OnSkip()
+        {
+            if (!CanSkipToResults) return;
+            StopAllCoroutines();
+            loop = null;
+            StopTimer();
+            awaitingRoll = false;
+            picking = false;
+            dice.SetRollable(false);
+            ClearSelectable();
+            ClearPreview();
+            AutoPlay.PlayOut(state, bot, rng, GameSettings.ThreeSixesRule, GameSettings.PlayForPlaces);
+            foreach (var pawn in pawns)
+            {
+                if (pawn != null) pawn.ResetPose();
+            }
+            LayoutTokens(0f);
+            StartCoroutine(FinishGame());
+        }
+
+        // ---------- Turn timer ----------
+
+        void StartTimer(int seconds)
+        {
+            timerDeadline = Time.time + seconds;
+            lastTick = int.MaxValue;
+        }
+
+        void StopTimer()
+        {
+            timerDeadline = float.PositiveInfinity;
+            foreach (var card in cards) card.HideTimer();
+        }
+
+        void UpdateTimer()
+        {
+            if (float.IsPositiveInfinity(timerDeadline)) return;
+            float left = Mathf.Max(0f, timerDeadline - Time.time);
+            cards[(int)current].SetTimer(left / GameSettings.TurnTimer);
+            int whole = Mathf.CeilToInt(left);
+            if (whole <= 3 && whole >= 1 && whole < lastTick)
+            {
+                lastTick = whole;
+                Sfx.Play("click", 0.7f);
+                Haptics.Tap(10, 60);
+            }
+        }
+
+        // ---------- Move preview ----------
+
+        static void EnsurePreviewMaterials()
+        {
+            if (quadMesh != null) return;
+            quadMesh = MeshBuilder.FlatQuad();
+            discMaterial = Materials.Unlit(SpriteFactory.Circle.texture, Color.white, true, 3);
+            markerMaterial = Materials.Unlit(SpriteFactory.Ring.texture, Color.white, true, 4);
+            dotMaterial = Materials.Unlit(SpriteFactory.Circle.texture, Color.white, true, 3);
+            shieldMaterial = Materials.Unlit(SpriteFactory.Shield.texture, new Color(1f, 1f, 1f, 0.95f), true, 7);
+            burstMaterial = Materials.Unlit(SpriteFactory.Burst.texture, new Color(1f, 0.32f, 0.2f, 1f), true, 7);
+            crownMaterial = Materials.Unlit(SpriteFactory.Crown.texture, Palette.Gold, true, 7);
+        }
+
+        /// <summary>Marks where each choice would land (and optionally the route), with capture / safe / home hints.</summary>
+        void ShowPreview(List<Move> moves)
+        {
+            ClearPreview();
+            if (GameSettings.Preview == PreviewMode.Off) return;
+            EnsurePreviewMaterials();
+            previewRoot = new GameObject("Preview").transform;
+            previewRoot.SetParent(board.Root, false);
+            var path = new MeshBatch();
+            previewDots = 0;
+            var seen = new HashSet<int>();
+            foreach (var m in moves)
+            {
+                if (!seen.Add(m.From)) continue;
+                bool capture = Rules.CapturesAt(state, m.Player, m.To).Count > 0;
+                bool home = m.To == BoardLayout.HomeProgress;
+                bool safe = !capture && !home && Rules.IsSafeLanding(m.Player, m.To);
+                var color = capture ? new Color(1f, 0.25f, 0.2f) : home ? Palette.Gold : Palette.Of(m.Player);
+                var marker = new GameObject("Marker").transform;
+                marker.SetParent(previewRoot, false);
+                marker.localPosition = board.TokenLocal(m.Player, m.Token, m.To) + Vector3.up * 0.07f;
+                AddQuad(marker, discMaterial, 1f, new Color(color.r, color.g, color.b, 0.55f), 0f, false);
+                AddQuad(marker, markerMaterial, 1.2f, color, 0.005f, false);
+                if (capture) AddQuad(marker, burstMaterial, 0.75f, null, 0.01f, true);
+                else if (home) AddQuad(marker, crownMaterial, 0.75f, null, 0.01f, true);
+                else if (safe) AddQuad(marker, shieldMaterial, 0.62f, null, 0.01f, true);
+                markers.Add((marker, m.From));
+
+                if (GameSettings.Preview != PreviewMode.MarkerAndPath) continue;
+                var dot = Palette.DarkOf(m.Player);
+                dot.a = 0.85f;
+                for (int progress = m.From + 1; progress < m.To; progress++)
+                {
+                    path.Quad(board.TokenLocal(m.Player, m.Token, progress) + Vector3.up * 0.06f, 0.3f, 0.3f, dot);
+                    previewDots++;
+                }
+            }
+            if (previewDots > 0)
+            {
+                var go = new GameObject("Path");
+                go.transform.SetParent(previewRoot, false);
+                go.AddComponent<MeshFilter>().sharedMesh = path.Build("PreviewPath");
+                go.AddComponent<MeshRenderer>().sharedMaterial = dotMaterial;
+            }
+            FrameGovernor.Keep(0.2f);
+        }
+
+        void AddQuad(Transform parent, Material material, float size, Color? color, float y, bool faceScreen)
+        {
+            var go = new GameObject("Quad");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(0f, y, 0f);
+            go.transform.localScale = new Vector3(size, 1f, size);
+            // Icons keep facing up the screen however the board is turned.
+            if (faceScreen) go.transform.rotation = Quaternion.identity;
+            go.AddComponent<MeshFilter>().sharedMesh = quadMesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            if (color.HasValue)
+            {
+                block.SetColor("_Color", color.Value);
+                renderer.SetPropertyBlock(block);
+            }
+        }
+
+        void AnimateMarkers()
+        {
+            if (markers.Count == 0) return;
+            float s = 0.92f + 0.12f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f));
+            foreach (var (marker, _) in markers) marker.localScale = new Vector3(s, 1f, s);
+        }
+
+        void ClearPreview()
+        {
+            markers.Clear();
+            previewDots = 0;
+            if (previewRoot != null) Destroy(previewRoot.gameObject);
+            previewRoot = null;
+        }
+
+        // ---------- Pieces ----------
 
         void ClearSelectable()
         {
@@ -380,12 +667,12 @@ namespace LudoGame
             }
         }
 
-        void Toast(string message)
+        void Toast(string message, float seconds = 1.5f)
         {
             toast.text = message;
             toastBg.gameObject.SetActive(true);
             toastBg.transform.SetAsLastSibling();
-            toastUntil = Time.unscaledTime + 1.5f;
+            toastUntil = Time.unscaledTime + seconds;
             FrameGovernor.Keep(0.2f);
         }
 
@@ -398,7 +685,31 @@ namespace LudoGame
             else yield return new WaitForSeconds(seconds);
         }
 
-        /// <summary>Avatar, name and colour for one player, beside their corner of the board.</summary>
+        // ---------- Hooks for DemoCapture (desktop screenshots) ----------
+
+        internal bool AwaitingRoll => awaitingRoll;
+        internal bool Picking => picking;
+        internal int PreviewDots => previewDots;
+        internal bool CanSkip => CanSkipToResults;
+
+        internal void DemoRoll()
+        {
+            if (awaitingRoll) rollRequested = true;
+        }
+
+        internal void DemoPick()
+        {
+            foreach (var pawn in pawns)
+            {
+                if (pawn == null || !pawn.IsSelectable) continue;
+                tapped = pawn;
+                return;
+            }
+        }
+
+        internal void DemoSkip() => OnSkip();
+
+        /// <summary>Avatar, name, colour, place and turn timer for one player, beside their corner of the board.</summary>
         sealed class PlayerCard
         {
             public const float Width = 330f;
@@ -408,6 +719,8 @@ namespace LudoGame
 
             readonly CanvasGroup group;
             readonly Image glow;
+            readonly Image timer;
+            readonly Image crown;
             readonly Text status;
             readonly bool active;
 
@@ -423,7 +736,16 @@ namespace LudoGame
                 button.transition = Selectable.Transition.None;
                 button.targetGraphic = bg;
                 button.onClick.AddListener(() => onTap());
-                Ui.Avatar(Rt, active ? Palette.Of(c) : Palette.ButtonMuted, 104f, new Vector2(-Width * 0.5f + 70f, 0f));
+                var avatarPos = new Vector2(-Width * 0.5f + 70f, 0f);
+                Ui.Avatar(Rt, active ? Palette.Of(c) : Palette.ButtonMuted, 104f, avatarPos);
+                timer = Ui.Image("Timer", Rt, SpriteFactory.Ring, Color.white, new Vector2(128f, 128f), avatarPos);
+                timer.type = Image.Type.Filled;
+                timer.fillMethod = Image.FillMethod.Radial360;
+                timer.fillOrigin = (int)Image.Origin360.Top;
+                timer.fillClockwise = false;
+                timer.enabled = false;
+                crown = Ui.Image("Crown", Rt, SpriteFactory.Crown, Palette.Gold, new Vector2(62f, 62f), avatarPos + new Vector2(0f, 66f));
+                crown.enabled = false;
                 Ui.Label(Rt, name, 42, Palette.Text, new Vector2(190f, 52f), new Vector2(64f, 18f), TextAnchor.MiddleLeft);
                 status = Ui.Label(Rt, Palette.Name(c), 30, active ? Palette.LightOf(c) : Palette.ButtonMuted, new Vector2(190f, 40f), new Vector2(64f, -28f), TextAnchor.MiddleLeft, shadow: false);
                 SetFocus(false);
@@ -437,7 +759,22 @@ namespace LudoGame
                 FrameGovernor.Keep(0.1f);
             }
 
-            public void SetStatus(string text) => status.text = text;
+            public void SetPlace(int place)
+            {
+                status.text = Ordinal(place).ToUpperInvariant() + " PLACE";
+                status.color = place == 1 ? Palette.Gold : Color.white;
+                crown.enabled = place == 1;
+            }
+
+            /// <summary>Shows the turn timer ring; it turns orange then red as time runs out.</summary>
+            public void SetTimer(float fraction)
+            {
+                timer.enabled = true;
+                timer.fillAmount = fraction;
+                timer.color = fraction > 0.5f ? new Color(0.35f, 0.9f, 0.45f) : fraction > 0.25f ? new Color(1f, 0.7f, 0.2f) : new Color(1f, 0.3f, 0.25f);
+            }
+
+            public void HideTimer() => timer.enabled = false;
         }
     }
 }
