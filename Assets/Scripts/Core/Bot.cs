@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace LudoTurbo.Core
+namespace LudoGame.Core
 {
     /// <summary>Computer player: scores each legal move with simple heuristics and picks the best.</summary>
     public sealed class Bot

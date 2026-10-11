@@ -1,7 +1,7 @@
-using LudoTurbo.Core;
+using LudoGame.Core;
 using UnityEngine;
 
-namespace LudoTurbo
+namespace LudoGame
 {
     public static class Palette
     {
@@ -40,6 +40,11 @@ namespace LudoTurbo
         public static readonly Color Overlay = new Color(0f, 0f, 0f, 0.65f);
         public static readonly Color Card = Hex(0x2B3858);
         public static readonly Color Glow = Hex(0xFFFFFF);
+        public static readonly Color TableCenter = Hex(0x34477E);
+        public static readonly Color Wood = Hex(0x9C6B45);
+        public static readonly Color Gold = Hex(0xFFD54F);
+
+        public static Color Darken(Color c, float amount = 0.7f) => new Color(c.r * amount, c.g * amount, c.b * amount, c.a);
 
         public static Color Of(PlayerColor c) => Main[(int)c];
 

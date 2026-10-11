@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace LudoTurbo.Core
+namespace LudoGame.Core
 {
     public enum PlayerColor { Red = 0, Green = 1, Yellow = 2, Blue = 3 }
 

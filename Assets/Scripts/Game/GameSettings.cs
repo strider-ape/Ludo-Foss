@@ -1,7 +1,7 @@
-using LudoTurbo.Core;
+using LudoGame.Core;
 using UnityEngine;
 
-namespace LudoTurbo
+namespace LudoGame
 {
     /// <summary>Player preferences, saved on the device between sessions.</summary>
     public static class GameSettings
@@ -14,7 +14,7 @@ namespace LudoTurbo
         /// <summary>1 = classic pace, 2..9 = that many times faster, 10 = instant.</summary>
         public static int Speed
         {
-            get => Mathf.Clamp(PlayerPrefs.GetInt("speed", 4), MinSpeed, MaxSpeed);
+            get => Mathf.Clamp(PlayerPrefs.GetInt("speed", 3), MinSpeed, MaxSpeed);
             set => SetInt("speed", Mathf.Clamp(value, MinSpeed, MaxSpeed));
         }
 
@@ -28,6 +28,29 @@ namespace LudoTurbo
         {
             get => PlayerPrefs.GetInt("threeSixes", 1) == 1;
             set => SetInt("threeSixes", value ? 1 : 0);
+        }
+
+        public static bool Sound
+        {
+            get => PlayerPrefs.GetInt("sound", 1) == 1;
+            set => SetInt("sound", value ? 1 : 0);
+        }
+
+        public static bool Vibration
+        {
+            get => PlayerPrefs.GetInt("vibration", 1) == 1;
+            set => SetInt("vibration", value ? 1 : 0);
+        }
+
+        /// <summary>Caps animations at 30 fps instead of 60.</summary>
+        public static bool BatterySaver
+        {
+            get => PlayerPrefs.GetInt("batterySaver", 0) == 1;
+            set
+            {
+                SetInt("batterySaver", value ? 1 : 0);
+                FrameGovernor.ApplyTargetFrameRate();
+            }
         }
 
         public static bool Instant => Speed >= MaxSpeed;

@@ -1,13 +1,13 @@
 using System;
 using UnityEngine;
 
-namespace LudoTurbo
+namespace LudoGame
 {
     /// <summary>Generates every sprite the game uses at runtime, so the project needs no image assets.</summary>
     public static class SpriteFactory
     {
-        static Sprite square, circle, ring, star, rounded, center;
-        static readonly Sprite[] dice = new Sprite[7];
+        static Sprite square, circle, ring, star, rounded, face;
+        static Texture2D diceAtlas, radialShadow, table;
 
         public static Sprite Square => square != null ? square : square = Make(8, (x, y) => 1f);
 
@@ -20,62 +20,81 @@ namespace LudoTurbo
         /// <summary>Rounded rectangle meant for Image.Type.Sliced.</summary>
         public static Sprite Rounded => rounded != null ? rounded : rounded = MakeRounded(64, 22);
 
-        /// <summary>The 3x3 home area: four triangles in red (left), green (top), yellow (right), blue (bottom).</summary>
-        public static Sprite Center
+        /// <summary>A friendly face (eyes and smile) in white, drawn over a coloured circle for player avatars.</summary>
+        public static Sprite Face => face != null ? face : face = Make(128, (x, y) =>
+        {
+            float eyes = Mathf.Max(Disc(x + 0.32f, y - 0.18f, 0.13f, 64), Disc(x - 0.32f, y - 0.18f, 0.13f, 64));
+            float r = Mathf.Sqrt(x * x + (y + 0.05f) * (y + 0.05f));
+            float smile = y < -0.12f ? Mathf.Clamp01((0.09f - Mathf.Abs(r - 0.45f)) * 64f) : 0f;
+            return Mathf.Max(eyes, smile);
+        });
+
+        /// <summary>Dice faces 1-6 in a 3x2 atlas: values 1-3 on the bottom row, 4-6 on the top row.</summary>
+        public static Texture2D DiceAtlas
         {
             get
             {
-                if (center != null) return center;
-                const int size = 192;
+                if (diceAtlas != null) return diceAtlas;
+                const int cell = 128;
+                var tex = new Texture2D(cell * 3, cell * 2, TextureFormat.RGBA32, true) { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp, anisoLevel = 2 };
+                var pixels = new Color[cell * 3 * cell * 2];
+                var pipColor = new Color(0.13f, 0.15f, 0.24f);
+                var onePip = new Color(0.85f, 0.15f, 0.15f);
+                for (int value = 1; value <= 6; value++)
+                {
+                    int ox = (value - 1) % 3 * cell, oy = (value - 1) / 3 * cell;
+                    var pips = PipPositions(value);
+                    for (int j = 0; j < cell; j++)
+                    {
+                        for (int i = 0; i < cell; i++)
+                        {
+                            float x = (i + 0.5f) / cell, y = (j + 0.5f) / cell;
+                            float edge = Mathf.Min(Mathf.Min(x, 1f - x), Mathf.Min(y, 1f - y));
+                            var col = Color.Lerp(new Color(0.86f, 0.86f, 0.9f), Color.white, Mathf.Clamp01(edge * 8f));
+                            foreach (var p in pips)
+                            {
+                                float d = Vector2.Distance(new Vector2(x, y), p);
+                                col = Color.Lerp(col, value == 1 ? onePip : pipColor, Mathf.Clamp01(((value == 1 ? 0.15f : 0.1f) - d) * cell));
+                            }
+                            pixels[(oy + j) * cell * 3 + ox + i] = col;
+                        }
+                    }
+                }
+                tex.SetPixels(pixels);
+                tex.Apply(true);
+                return diceAtlas = tex;
+            }
+        }
+
+        /// <summary>Soft round shadow: opaque in the middle, fading to nothing at the edge.</summary>
+        public static Texture2D RadialShadow => radialShadow != null ? radialShadow : radialShadow = Make(64, (x, y) =>
+        {
+            float d = Mathf.Sqrt(x * x + y * y);
+            return Mathf.Clamp01(1f - d) * Mathf.Clamp01(1f - d) ;
+        }).texture;
+
+        /// <summary>Table under the board: a soft radial gradient.</summary>
+        public static Texture2D Table
+        {
+            get
+            {
+                if (table != null) return table;
+                const int size = 256;
                 var tex = NewTexture(size);
                 var pixels = new Color[size * size];
                 for (int j = 0; j < size; j++)
                 {
                     for (int i = 0; i < size; i++)
                     {
-                        float dx = (i + 0.5f) / size - 0.5f;
-                        float dy = (j + 0.5f) / size - 0.5f; // texture row 0 is the bottom, so positive = towards the top
-                        Core.PlayerColor c;
-                        if (Mathf.Abs(dx) > Mathf.Abs(dy)) c = dx < 0 ? Core.PlayerColor.Red : Core.PlayerColor.Yellow;
-                        else c = dy > 0 ? Core.PlayerColor.Green : Core.PlayerColor.Blue;
-                        pixels[j * size + i] = Palette.Of(c);
+                        float x = (i + 0.5f) / size * 2f - 1f, y = (j + 0.5f) / size * 2f - 1f;
+                        float d = Mathf.Clamp01(Mathf.Sqrt(x * x + y * y));
+                        pixels[j * size + i] = Color.Lerp(Palette.TableCenter, Palette.Background, Ease.Smooth(d));
                     }
                 }
                 tex.SetPixels(pixels);
                 tex.Apply();
-                return center = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+                return table = tex;
             }
-        }
-
-        public static Sprite DiceFace(int value)
-        {
-            if (dice[value] != null) return dice[value];
-            const int size = 128;
-            var tex = NewTexture(size);
-            var pixels = new Color[size * size];
-            var pips = PipPositions(value);
-            var pipColor = new Color(0.12f, 0.16f, 0.27f);
-            for (int j = 0; j < size; j++)
-            {
-                for (int i = 0; i < size; i++)
-                {
-                    float x = (i + 0.5f) / size;
-                    float y = 1f - (j + 0.5f) / size;
-                    float body = RoundedBox(x, y, 0.5f, 0.5f, 0.5f, 0.5f, 0.17f, size);
-                    float pip = 0f;
-                    foreach (var p in pips)
-                    {
-                        float d = Vector2.Distance(new Vector2(x, y), p);
-                        pip = Mathf.Max(pip, Mathf.Clamp01((0.095f - d) * size));
-                    }
-                    var col = Color.Lerp(Color.white, pipColor, pip);
-                    col.a = body;
-                    pixels[j * size + i] = col;
-                }
-            }
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return dice[value] = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
         }
 
         static Vector2[] PipPositions(int value)

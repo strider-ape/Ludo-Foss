@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace LudoTurbo.Core
+namespace LudoGame.Core
 {
     public struct Move
     {

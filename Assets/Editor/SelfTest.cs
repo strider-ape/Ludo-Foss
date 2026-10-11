@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
-using LudoTurbo.Core;
+using LudoGame.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace LudoTurbo.EditorTools
+namespace LudoGame.EditorTools
 {
     /// <summary>
     /// Checks board geometry and rules, then plays hundreds of bot-only games.
-    /// Unity.exe -batchmode -quit -projectPath . -executeMethod LudoTurbo.EditorTools.SelfTest.Run
+    /// Unity.exe -batchmode -quit -projectPath . -executeMethod LudoGame.EditorTools.SelfTest.Run
     /// </summary>
     public static class SelfTest
     {

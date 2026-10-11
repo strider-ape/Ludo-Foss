@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace LudoTurbo.Core
+namespace LudoGame.Core
 {
     public enum SeatType { Off = 0, Human = 1, Computer = 2 }
 

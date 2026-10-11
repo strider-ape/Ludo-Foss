@@ -3,7 +3,7 @@ using System.Collections;
 using System.IO;
 using UnityEngine;
 
-namespace LudoTurbo
+namespace LudoGame
 {
     /// <summary>
     /// Development aid: launch a desktop build with "-demo-capture &lt;folder&gt;" to save screenshots of the menu
@@ -38,13 +38,18 @@ namespace LudoTurbo
             yield return Capture("3-match-mid.png");
 
             GameSettings.Speed = GameSettings.MaxSpeed;
-            yield return new WaitForSecondsRealtime(30f);
+            float giveUp = Time.realtimeSinceStartup + 90f;
+            while (GameObject.Find("Winner") == null && Time.realtimeSinceStartup < giveUp) yield return null;
+            yield return new WaitForSecondsRealtime(0.5f);
             yield return Capture("4-match-end.png");
             Application.Quit();
         }
 
         IEnumerator Capture(string name)
         {
+            // Make sure this frame is actually drawn: the frame governor skips frames while nothing moves.
+            FrameGovernor.Keep(0.5f);
+            yield return null;
             yield return new WaitForEndOfFrame();
             ScreenCapture.CaptureScreenshot(Path.Combine(folder, name));
             yield return null;

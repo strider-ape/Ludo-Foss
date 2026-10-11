@@ -5,16 +5,16 @@ using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-namespace LudoTurbo.EditorTools
+namespace LudoGame.EditorTools
 {
     /// <summary>
     /// One-click Android build. From the command line:
-    /// Unity.exe -batchmode -quit -projectPath . -buildTarget Android -executeMethod LudoTurbo.EditorTools.BuildAndroid.Build
+    /// Unity.exe -batchmode -quit -projectPath . -buildTarget Android -executeMethod LudoGame.EditorTools.BuildAndroid.Build
     /// </summary>
     public static class BuildAndroid
     {
         const string ScenePath = "Assets/Scenes/Main.unity";
-        const string OutputPath = "Builds/LudoTurbo.apk";
+        static string OutputPath => "Builds/" + AppInfo.FileName + ".apk";
 
         [MenuItem("Ludo/Build Android APK")]
         public static void Build()
@@ -51,10 +51,10 @@ namespace LudoTurbo.EditorTools
         static void ConfigurePlayer()
         {
             PlayerSettings.companyName = "gdr97";
-            PlayerSettings.productName = "Ludo Turbo";
-            PlayerSettings.bundleVersion = "0.1.0";
-            PlayerSettings.Android.bundleVersionCode = 1;
-            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.gdr97.ludoturbo");
+            PlayerSettings.productName = AppInfo.Name;
+            PlayerSettings.bundleVersion = AppInfo.Version;
+            PlayerSettings.Android.bundleVersionCode = AppInfo.VersionCode;
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, AppInfo.AndroidId);
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64 | AndroidArchitecture.ARMv7;
