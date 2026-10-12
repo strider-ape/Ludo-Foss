@@ -70,6 +70,27 @@ namespace LudoGame
             set => SetInt("colorShapes", value ? 1 : 0);
         }
 
+        /// <summary>Thin frame, no side margins: the board fills the screen width.</summary>
+        public static bool EdgeToEdge
+        {
+            get => PlayerPrefs.GetInt("edgeToEdge", 1) == 1;
+            set => SetInt("edgeToEdge", value ? 1 : 0);
+        }
+
+        /// <summary>When choosing a pawn, the camera glides in to frame the choices.</summary>
+        public static bool ZoomToChoices
+        {
+            get => PlayerPrefs.GetInt("zoomToChoices", 1) == 1;
+            set => SetInt("zoomToChoices", value ? 1 : 0);
+        }
+
+        /// <summary>A tap anywhere near a glowing pawn picks the nearest one.</summary>
+        public static bool GenerousTaps
+        {
+            get => PlayerPrefs.GetInt("generousTaps", 1) == 1;
+            set => SetInt("generousTaps", value ? 1 : 0);
+        }
+
         /// <summary>How much to show about a move before you choose it.</summary>
         public static PreviewMode Preview
         {

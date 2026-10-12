@@ -29,6 +29,10 @@ Every helper below can be switched on or off in Settings:
 - **Turn timer** (off by default): 10, 15 or 30 seconds, shown as a ring around your avatar. When it runs out, the game either plays the move for you or skips the turn
 - **Pawn style**: Outline (default: bigger pawns with a dark cartoon edge, easy to see on any square, including their own colour), Outline + coin, or Classic
 - **Colour shapes** for colour-blind players: circle (red), triangle (green), square (yellow) and star (blue) on pawns, bases, home triangles and avatars
+- **Bigger board** on small phones:
+  - **Edge-to-edge board**: a thin frame and no side margins, so the board fills the screen width
+  - **Zoom to choices**: when you pick a pawn, the camera glides in on your choices (up to about twice the size), then back out
+  - **Generous taps**: a tap anywhere near a glowing pawn picks the nearest one
 - **Auto-move**: when only one move is possible, it happens by itself
 - **Three 6s in a row lose the turn**
 - **Sound**, **vibration** and **battery saver**

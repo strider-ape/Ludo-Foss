@@ -9,14 +9,23 @@ namespace LudoGame
     /// </summary>
     public sealed class Board3D
     {
-        public const float FrameSize = 16.4f;
-        public const float HalfExtent = FrameSize * 0.5f;
+        /// <summary>Width of the wooden frame: classic, or a thin rim for the edge-to-edge board.</summary>
+        const float FrameSize = 16.4f;
+        const float ThinFrameSize = 15.4f;
         public const float TableY = -0.6f;
 
         const float LinesY = 0.01f, CellsY = 0.02f, DecalY = 0.03f, SlotY = 0.04f;
 
+        /// <summary>True when the board uses its thin rim and fills the screen width.</summary>
+        public static bool EdgeToEdge { get; private set; }
+
+        /// <summary>Half the board's outer width, including the frame.</summary>
+        public static float HalfExtent => (EdgeToEdge ? ThinFrameSize : FrameSize) * 0.5f;
+
         public readonly Transform Root;
 
+        GameObject frame;
+        GameObject thinFrame;
         Transform shapes;
         readonly System.Collections.Generic.List<Transform> shapeIcons = new System.Collections.Generic.List<Transform>();
 
@@ -37,6 +46,14 @@ namespace LudoGame
 
         /// <summary>Shows or hides the colour-blind shapes on the bases and home triangles.</summary>
         public void SetShapesVisible(bool visible) => shapes.gameObject.SetActive(visible);
+
+        /// <summary>Swaps between the classic wooden frame and the thin edge-to-edge rim. Refit the camera afterwards.</summary>
+        public void SetEdgeToEdge(bool on)
+        {
+            EdgeToEdge = on;
+            frame.SetActive(!on);
+            thinFrame.SetActive(on);
+        }
 
         void BuildShapes()
         {
@@ -104,8 +121,11 @@ namespace LudoGame
 
         void Build()
         {
-            var frame = MeshBuilder.RoundedBox(new Vector3(FrameSize, 0.6f, FrameSize), 0.22f, 4);
-            AddMesh("Frame", frame, Materials.Glossy(Palette.Wood, null, 20f, 0.2f, 0.12f), new Vector3(0f, -0.3f, 0f));
+            var wood = Materials.Glossy(Palette.Wood, null, 20f, 0.2f, 0.12f);
+            frame = AddMesh("Frame", MeshBuilder.RoundedBox(new Vector3(FrameSize, 0.6f, FrameSize), 0.22f, 4), wood, new Vector3(0f, -0.3f, 0f));
+            thinFrame = AddMesh("ThinFrame", MeshBuilder.RoundedBox(new Vector3(ThinFrameSize, 0.6f, ThinFrameSize), 0.12f, 4), wood, new Vector3(0f, -0.3f, 0f));
+            thinFrame.SetActive(EdgeToEdge);
+            frame.SetActive(!EdgeToEdge);
 
             var cells = new MeshBatch();
             cells.Quad(new Vector3(0f, LinesY, 0f), 15.1f, 15.1f, Palette.BoardLine);
@@ -164,13 +184,14 @@ namespace LudoGame
             AddMesh("Stars", stars.Build("Stars"), Materials.Unlit(SpriteFactory.Star.texture, Color.white, true, 1), Vector3.zero);
         }
 
-        void AddMesh(string name, Mesh mesh, Material material, Vector3 localPos)
+        GameObject AddMesh(string name, Mesh mesh, Material material, Vector3 localPos)
         {
             var go = new GameObject(name);
             go.transform.SetParent(Root, false);
             go.transform.localPosition = localPos;
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
+            return go;
         }
     }
 }

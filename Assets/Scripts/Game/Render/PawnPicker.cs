@@ -8,11 +8,19 @@ namespace LudoGame
     /// </summary>
     public static class PawnPicker
     {
-        /// <summary>The selectable pawn under <paramref name="tap"/> (screen pixels), or null.</summary>
-        public static Pawn3D Pick(Vector2 tap, Pawn3D[,] pawns, CameraRig rig)
+        /// <summary>How far from a pawn a tap still counts, in board squares: normal, and with "Generous taps".</summary>
+        public const float NormalReach = 0.65f;
+        public const float GenerousReach = 1.75f;
+
+        /// <summary>
+        /// The selectable pawn nearest to <paramref name="tap"/> (screen pixels) within reach, or null.
+        /// Reach defaults to the "Generous taps" setting.
+        /// </summary>
+        public static Pawn3D Pick(Vector2 tap, Pawn3D[,] pawns, CameraRig rig, float reach = -1f)
         {
+            if (reach < 0f) reach = GameSettings.GenerousTaps ? GenerousReach : NormalReach;
             Pawn3D best = null;
-            float bestDistance = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude * 0.65f;
+            float bestDistance = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude * reach;
             foreach (var pawn in pawns)
             {
                 if (pawn == null || !pawn.IsSelectable) continue;

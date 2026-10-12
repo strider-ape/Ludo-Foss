@@ -130,7 +130,11 @@ namespace LudoGame
 
         void OnDestroy()
         {
-            if (rig != null) rig.Reframed -= LayoutUi;
+            if (rig != null)
+            {
+                rig.Reframed -= LayoutUi;
+                rig.ResetZoom(0f);
+            }
             if (pieces != null) Destroy(pieces.gameObject);
             if (previewRoot != null) Destroy(previewRoot.gameObject);
             if (dice != null) Destroy(dice.gameObject);
@@ -180,6 +184,13 @@ namespace LudoGame
             bool pulsing = dice.IsRollable || picking;
             FrameGovernor.Pulsing = pulsing;
             if (toastBg.gameObject.activeSelf && Time.unscaledTime > toastUntil) toastBg.gameObject.SetActive(false);
+            // Stack badges follow the camera when it zooms or shakes.
+            var cameraPosition = rig.Cam.transform.position;
+            if (cameraPosition != lastCameraPosition)
+            {
+                lastCameraPosition = cameraPosition;
+                PositionBadges();
+            }
             UpdateTimer();
             AnimateMarkers();
 
@@ -306,6 +317,7 @@ namespace LudoGame
                     tapped = null;
                     foreach (var m in moves) pawns[(int)p, m.Token].SetSelectable(true);
                     ShowPreview(moves);
+                    if (GameSettings.ZoomToChoices) rig.ZoomToFit(ChoicePoints(moves), 0.35f);
                     picking = true;
                     while (tapped == null)
                     {
@@ -319,6 +331,7 @@ namespace LudoGame
                     picking = false;
                     ClearSelectable();
                     ClearPreview();
+                    rig.ResetZoom(0.3f);
                     hint.text = "";
                     if (timedOut && !GameSettings.TimerAutoPlays)
                     {
@@ -446,6 +459,7 @@ namespace LudoGame
             dice.SetRollable(false);
             ClearSelectable();
             ClearPreview();
+            rig.ResetZoom(0f);
             AutoPlay.PlayOut(state, bot, rng, GameSettings.ThreeSixesRule, GameSettings.PlayForPlaces);
             foreach (var pawn in pawns)
             {
@@ -649,6 +663,7 @@ namespace LudoGame
         readonly List<(Vector3 centre, int count)> stacks = new List<(Vector3, int)>();
         readonly List<(RectTransform rt, Text label)> badges = new List<(RectTransform, Text)>();
         RectTransform badgeLayer;
+        Vector3 lastCameraPosition;
 
         void ShowBadges()
         {
@@ -683,9 +698,31 @@ namespace LudoGame
             foreach (var (rt, _) in badges) rt.gameObject.SetActive(false);
         }
 
-        /// <summary>Applies pawn style and colour-shape settings changed mid-game.</summary>
+        /// <summary>Everything the camera should frame while choosing: each choice's pawn and where it would land.</summary>
+        List<Vector3> ChoicePoints(List<Move> moves)
+        {
+            var points = new List<Vector3>();
+            float height = 1.25f * PawnStyle.Size;
+            foreach (var m in moves)
+            {
+                var at = pawns[(int)m.Player, m.Token].transform.position;
+                var to = board.World(board.TokenLocal(m.Player, m.Token, m.To));
+                points.Add(at);
+                points.Add(at + Vector3.up * height);
+                points.Add(to);
+                points.Add(to + Vector3.up * height);
+            }
+            return points;
+        }
+
+        /// <summary>Applies look and board-size settings changed mid-game.</summary>
         public void ApplyLook()
         {
+            if (Board3D.EdgeToEdge != GameSettings.EdgeToEdge)
+            {
+                board.SetEdgeToEdge(GameSettings.EdgeToEdge);
+                rig.Frame(); // refits the camera and re-places the cards and die (Reframed -> LayoutUi)
+            }
             PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
             board.SetShapesVisible(GameSettings.ColorShapes);
             foreach (var pawn in pawns)

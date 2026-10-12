@@ -40,6 +40,7 @@ namespace LudoGame
             Materials.SetupLighting();
             rig = CameraRig.Create();
             board = new Board3D(null);
+            ApplyBoardSize();
             Sfx.Init(rig.gameObject);
 
             var canvasGo = new GameObject("Canvas", typeof(RectTransform));
@@ -206,6 +207,10 @@ namespace LudoGame
             rows.Header("LOOK");
             rows.Cycle("Pawn style", new[] { "Classic", "Outline", "Outline + coin" }, () => (int)GameSettings.Pawns, i => GameSettings.Pawns = (PawnLook)i);
             rows.Toggle("Colour shapes", () => GameSettings.ColorShapes, v => GameSettings.ColorShapes = v);
+            rows.Header("BIGGER BOARD");
+            rows.Toggle("Edge-to-edge board", () => GameSettings.EdgeToEdge, v => GameSettings.EdgeToEdge = v);
+            rows.Toggle("Zoom to choices", () => GameSettings.ZoomToChoices, v => GameSettings.ZoomToChoices = v);
+            rows.Toggle("Generous taps", () => GameSettings.GenerousTaps, v => GameSettings.GenerousTaps = v);
             rows.Header("SOUND & DEVICE");
             rows.Toggle("Sound", () => GameSettings.Sound, v => GameSettings.Sound = v);
             rows.Toggle("Vibration", () => GameSettings.Vibration, v => GameSettings.Vibration = v);
@@ -223,8 +228,20 @@ namespace LudoGame
             overlay = null;
             Time.timeScale = 1f;
             FrameGovernor.Keep(0.3f);
-            if (match == null) ShowMenu(); // refresh, e.g. CONTINUE appears or disappears with "Resume unfinished game"
-            else match.ApplyLook();
+            if (match != null)
+            {
+                match.ApplyLook();
+                return;
+            }
+            ApplyBoardSize();
+            ShowMenu(); // refresh, e.g. CONTINUE appears or disappears with "Resume unfinished game"
+        }
+
+        /// <summary>Thin edge-to-edge frame or the classic one, then refit the camera to it.</summary>
+        void ApplyBoardSize()
+        {
+            board.SetEdgeToEdge(GameSettings.EdgeToEdge);
+            rig.Frame();
         }
 
         // ---------- Results ----------

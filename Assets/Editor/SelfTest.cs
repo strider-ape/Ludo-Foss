@@ -217,9 +217,15 @@ namespace LudoGame.EditorTools
             var savedStyle = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes);
             try
             {
+                foreach (bool edge in new[] { false, true })
                 foreach (var look in new[] { PawnLook.Classic, PawnLook.Outline, PawnLook.OutlineCoin })
                 for (int rotation = 0; rotation < 4; rotation++)
                 {
+                    if (Board3D.EdgeToEdge != edge || rotation == 0)
+                    {
+                        board.SetEdgeToEdge(edge);
+                        rig.Frame();
+                    }
                     PawnStyle.Apply(look, true);
                     board.SetRotationSteps(rotation);
                     foreach (var (name, pieces) in scenarios)
@@ -237,10 +243,11 @@ namespace LudoGame.EditorTools
                             if (pawn == null || !pawn.IsSelectable) continue;
                             PawnPicker.ScreenSpan(pawn, rig, out var foot, out var head);
                             foreach (var tap in new[] { foot, Vector2.Lerp(foot, head, 0.5f), head })
+                            foreach (float reach in new[] { PawnPicker.NormalReach, PawnPicker.GenerousReach })
                             {
                                 taps++;
-                                var picked = PawnPicker.Pick(tap, pawns, rig);
-                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, {look} pawns, board turned {rotation * 90} deg) picked "
+                                var picked = PawnPicker.Pick(tap, pawns, rig, reach);
+                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, {look} pawns, reach {reach}, edge-to-edge {edge}, board turned {rotation * 90} deg) picked "
                                     + (picked == null ? "nothing" : $"{picked.Color} pawn {picked.Index}"));
                             }
                         }
@@ -250,10 +257,27 @@ namespace LudoGame.EditorTools
                         }
                     }
                 }
+
+                // Generous taps reach further: a tap about 1.2 squares beside a lone glowing pawn.
+                board.SetEdgeToEdge(true);
+                rig.Frame();
+                board.SetRotationSteps(0);
+                PawnStyle.Apply(PawnLook.Outline, false);
+                var lone = new Pawn3D[GameState.Players, GameState.TokensPerPlayer];
+                lone[0, 0] = Pawn3D.Create(board.Root, red, 0);
+                lone[0, 0].transform.localPosition = board.TokenLocal(red, 0, 30);
+                lone[0, 0].SetSelectable(true);
+                PawnPicker.ScreenSpan(lone[0, 0], rig, out var loneFoot, out _);
+                float cellPx = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude;
+                var nearMiss = loneFoot + Vector2.right * cellPx * 1.2f;
+                Check(PawnPicker.Pick(nearMiss, lone, rig, PawnPicker.NormalReach) == null, "a tap 1.2 squares away misses with normal reach");
+                Check(PawnPicker.Pick(nearMiss, lone, rig, PawnPicker.GenerousReach) == lone[0, 0], "a tap 1.2 squares away hits with generous reach");
+                UnityEngine.Object.DestroyImmediate(lone[0, 0].gameObject);
             }
             finally
             {
                 (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes) = savedStyle;
+                board.SetEdgeToEdge(false);
                 foreach (var o in created) UnityEngine.Object.DestroyImmediate(o);
             }
             Debug.Log($"[Ludo] Tap check: {taps} simulated taps on glowing pawns");
