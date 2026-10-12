@@ -105,7 +105,8 @@ namespace LudoGame
             Ui.Label(screen, AppInfo.Name.ToUpperInvariant(), 150, Palette.Text, new Vector2(1040, 190), new Vector2(0, 720));
             for (int p = 0; p < GameState.Players; p++)
             {
-                Ui.Avatar(screen, Palette.Of((PlayerColor)p), 96f, new Vector2(-195f + p * 130f, 575f));
+                var avatar = Ui.Avatar(screen, Palette.Of((PlayerColor)p), 96f, new Vector2(-195f + p * 130f, 575f));
+                if (GameSettings.ColorShapes) Ui.ShapeBadge(avatar, (PlayerColor)p, 96f);
             }
             Ui.Label(screen, "No ads  -  No tracking  -  Just Ludo", 40, new Color(1f, 1f, 1f, 0.75f), new Vector2(1000, 60), new Vector2(0, 470), TextAnchor.MiddleCenter, shadow: false);
 
@@ -202,6 +203,9 @@ namespace LudoGame
                 () => System.Array.IndexOf(GameSettings.TimerChoices, GameSettings.TurnTimer), i => GameSettings.TurnTimer = GameSettings.TimerChoices[i]);
             rows.Cycle("When time runs out", new[] { "Skip turn", "Auto-play" }, () => GameSettings.TimerAutoPlays ? 1 : 0, i => GameSettings.TimerAutoPlays = i == 1);
             rows.Toggle("Resume unfinished game", () => GameSettings.ResumeGames, v => GameSettings.ResumeGames = v);
+            rows.Header("LOOK");
+            rows.Cycle("Pawn style", new[] { "Classic", "Outline", "Outline + coin" }, () => (int)GameSettings.Pawns, i => GameSettings.Pawns = (PawnLook)i);
+            rows.Toggle("Colour shapes", () => GameSettings.ColorShapes, v => GameSettings.ColorShapes = v);
             rows.Header("SOUND & DEVICE");
             rows.Toggle("Sound", () => GameSettings.Sound, v => GameSettings.Sound = v);
             rows.Toggle("Vibration", () => GameSettings.Vibration, v => GameSettings.Vibration = v);
@@ -220,6 +224,7 @@ namespace LudoGame
             Time.timeScale = 1f;
             FrameGovernor.Keep(0.3f);
             if (match == null) ShowMenu(); // refresh, e.g. CONTINUE appears or disappears with "Resume unfinished game"
+            else match.ApplyLook();
         }
 
         // ---------- Results ----------
@@ -247,7 +252,8 @@ namespace LudoGame
                 var step = Ui.Image("Step", card, SpriteFactory.Rounded, medals[k], new Vector2(250f, heights[k]), new Vector2(xs[k], baseY + heights[k] * 0.5f), sliced: true);
                 Ui.Label(step.transform, (place + 1).ToString(), 96, Color.white, new Vector2(250f, heights[k]), Vector2.zero);
                 float avatarY = baseY + heights[k] + 80f;
-                Ui.Avatar(card, Palette.Of(entry.Color), 130f, new Vector2(xs[k], avatarY));
+                var avatar = Ui.Avatar(card, Palette.Of(entry.Color), 130f, new Vector2(xs[k], avatarY));
+                if (GameSettings.ColorShapes) Ui.ShapeBadge(avatar, entry.Color, 130f);
                 if (place == 0) Ui.Image("Crown", card, SpriteFactory.Crown, Palette.Gold, new Vector2(92f, 92f), new Vector2(xs[k], avatarY + 98f));
                 Ui.Label(card, entry.Name, 38, Color.white, new Vector2(270f, 50f), new Vector2(xs[k], baseY - 40f));
             }

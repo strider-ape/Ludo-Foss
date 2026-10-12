@@ -6,7 +6,19 @@ namespace LudoGame
     /// <summary>Generates every sprite the game uses at runtime, so the project needs no image assets.</summary>
     public static class SpriteFactory
     {
-        static Sprite square, circle, ring, star, rounded, face, shield, burst, crown;
+        static Sprite square, circle, ring, star, rounded, face, shield, burst, crown, triangle, block, dot;
+
+        /// <summary>Colour-blind shapes: red circle, green triangle, yellow square, blue star.</summary>
+        public static Sprite ShapeOf(Core.PlayerColor c)
+        {
+            switch (c)
+            {
+                case Core.PlayerColor.Red: return dot != null ? dot : dot = Make(128, (x, y) => Disc(x, y, 0.78f, 64));
+                case Core.PlayerColor.Green: return triangle != null ? triangle : triangle = Polygon(new[] { new Vector2(0f, 0.9f), new Vector2(0.88f, -0.68f), new Vector2(-0.88f, -0.68f) });
+                case Core.PlayerColor.Yellow: return block != null ? block : block = Polygon(new[] { new Vector2(-0.7f, -0.7f), new Vector2(0.7f, -0.7f), new Vector2(0.7f, 0.7f), new Vector2(-0.7f, 0.7f) });
+                default: return Star;
+            }
+        }
 
         /// <summary>Safe-square hint.</summary>
         public static Sprite Shield => shield != null ? shield : shield = Polygon(new[]
@@ -62,7 +74,34 @@ namespace LudoGame
             }
             return inside;
         }
-        static Texture2D diceAtlas, radialShadow, table;
+        static Texture2D diceAtlas, radialShadow, table, puck;
+
+        /// <summary>A white coin with a dark rim, set under a pawn so it stands out on any square.</summary>
+        public static Texture2D Puck
+        {
+            get
+            {
+                if (puck != null) return puck;
+                const int size = 128;
+                var tex = NewTexture(size);
+                var pixels = new Color[size * size];
+                var rim = new Color(0.1f, 0.12f, 0.24f);
+                for (int j = 0; j < size; j++)
+                {
+                    for (int i = 0; i < size; i++)
+                    {
+                        float x = (i + 0.5f) / size * 2f - 1f, y = (j + 0.5f) / size * 2f - 1f;
+                        float d = Mathf.Sqrt(x * x + y * y);
+                        var c = Color.Lerp(Color.white, rim, Mathf.Clamp01((d - 0.84f) * 64f));
+                        c.a = Mathf.Clamp01((1f - d) * 64f);
+                        pixels[j * size + i] = c;
+                    }
+                }
+                tex.SetPixels(pixels);
+                tex.Apply();
+                return puck = tex;
+            }
+        }
 
         public static Sprite Square => square != null ? square : square = Make(8, (x, y) => 1f);
 

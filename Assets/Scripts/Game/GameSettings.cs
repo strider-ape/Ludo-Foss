@@ -5,6 +5,8 @@ namespace LudoGame
 {
     public enum PreviewMode { Off = 0, Marker = 1, MarkerAndPath = 2 }
 
+    public enum PawnLook { Classic = 0, Outline = 1, OutlineCoin = 2 }
+
     /// <summary>Player preferences, saved on the device between sessions.</summary>
     public static class GameSettings
     {
@@ -53,6 +55,19 @@ namespace LudoGame
                 SetInt("batterySaver", value ? 1 : 0);
                 FrameGovernor.ApplyTargetFrameRate();
             }
+        }
+
+        public static PawnLook Pawns
+        {
+            get => (PawnLook)Mathf.Clamp(PlayerPrefs.GetInt("pawnLook", (int)PawnLook.Outline), 0, 2);
+            set => SetInt("pawnLook", (int)value);
+        }
+
+        /// <summary>A shape per colour (circle, triangle, square, star) on pawns, bases and avatars, for colour-blind players.</summary>
+        public static bool ColorShapes
+        {
+            get => PlayerPrefs.GetInt("colorShapes", 0) == 1;
+            set => SetInt("colorShapes", value ? 1 : 0);
         }
 
         /// <summary>How much to show about a move before you choose it.</summary>

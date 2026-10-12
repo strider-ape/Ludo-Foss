@@ -16,6 +16,18 @@ namespace LudoGame
 
         static Shader GlossyShader => glossy != null ? glossy : glossy = Shader.Find("Ludo/Glossy");
 
+        static Shader outline;
+
+        static Shader OutlineShader => outline != null ? outline : outline = Shader.Find("Ludo/Outline");
+
+        /// <summary>Flat-colour outline drawn around a mesh; width is in the mesh's own units.</summary>
+        public static Material Outline(Color color, float width)
+        {
+            var m = new Material(OutlineShader) { color = color };
+            m.SetFloat("_Width", width);
+            return m;
+        }
+
         public static void SetupLighting()
         {
             Shader.SetGlobalVector("_LudoLightDir", LightDir);

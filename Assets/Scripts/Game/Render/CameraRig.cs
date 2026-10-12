@@ -9,7 +9,8 @@ namespace LudoGame
     /// </summary>
     public sealed class CameraRig : MonoBehaviour
     {
-        const float Pitch = 66f;
+        /// <summary>Downward camera angle in degrees (90 = straight down). Lower shows more of the pawns' sides.</summary>
+        public static float Pitch = 58f;
         const float FieldOfView = 30f;
 
         public Camera Cam { get; private set; }
@@ -48,6 +49,13 @@ namespace LudoGame
             table.transform.localScale = new Vector3(140f, 1f, 140f);
             table.AddComponent<MeshFilter>().sharedMesh = MeshBuilder.FlatQuad();
             table.AddComponent<MeshRenderer>().sharedMaterial = Materials.Unlit(SpriteFactory.Table, Color.white, false, -100);
+        }
+
+        /// <summary>Re-aims the camera after <see cref="Pitch"/> changes and refits the board.</summary>
+        public void ApplyPitch()
+        {
+            transform.rotation = Quaternion.Euler(Pitch, 0f, 0f);
+            Frame();
         }
 
         /// <summary>Moves the camera back until the whole board fits with room for the cards above and below it.</summary>

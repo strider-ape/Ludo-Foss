@@ -17,14 +17,56 @@ namespace LudoGame
 
         public readonly Transform Root;
 
+        Transform shapes;
+        readonly System.Collections.Generic.List<Transform> shapeIcons = new System.Collections.Generic.List<Transform>();
+
         public Board3D(Transform parent)
         {
             Root = new GameObject("Board").transform;
             Root.SetParent(parent, false);
             Build();
+            BuildShapes();
         }
 
-        public void SetRotationSteps(int clockwiseSteps) => Root.localRotation = Quaternion.Euler(0f, 90f * clockwiseSteps, 0f);
+        public void SetRotationSteps(int clockwiseSteps)
+        {
+            Root.localRotation = Quaternion.Euler(0f, 90f * clockwiseSteps, 0f);
+            // Shape icons stay upright on screen however the board is turned.
+            foreach (var icon in shapeIcons) icon.rotation = Quaternion.identity;
+        }
+
+        /// <summary>Shows or hides the colour-blind shapes on the bases and home triangles.</summary>
+        public void SetShapesVisible(bool visible) => shapes.gameObject.SetActive(visible);
+
+        void BuildShapes()
+        {
+            shapes = new GameObject("Shapes").transform;
+            shapes.SetParent(Root, false);
+            var quad = MeshBuilder.FlatQuad();
+            var triangleCentres = new[] { Cell(6f, 7f), Cell(7f, 6f), Cell(8f, 7f), Cell(7f, 8f) }; // red, green, yellow, blue
+            for (int p = 0; p < GameState.Players; p++)
+            {
+                var c = (PlayerColor)p;
+                var texture = SpriteFactory.ShapeOf(c).texture;
+                var o = BoardLayout.BaseOrigin(c);
+                // In the colour on the white middle of the base, and in white on the colour's home triangle.
+                AddShape(quad, Materials.Unlit(texture, Palette.Of(c), true, 3), Cell(o.X + 2.5f, o.Y + 2.5f) + Vector3.up * SlotY, 0.8f);
+                AddShape(quad, Materials.Unlit(texture, new Color(1f, 1f, 1f, 0.95f), true, 3), triangleCentres[p] + Vector3.up * DecalY, 0.62f);
+            }
+            shapes.gameObject.SetActive(false);
+        }
+
+        void AddShape(Mesh quad, Material material, Vector3 localPos, float size)
+        {
+            var go = new GameObject("Shape");
+            go.transform.SetParent(shapes, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = new Vector3(size, 1f, size);
+            go.transform.rotation = Quaternion.identity;
+            go.AddComponent<MeshFilter>().sharedMesh = quad;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+            shapeIcons.Add(go.transform);
+        }
 
         /// <summary>Board-local position of a cell centre. Fractional cells are allowed.</summary>
         public static Vector3 Cell(float x, float y) => new Vector3(x - 7f, 0f, 7f - y);

@@ -214,10 +214,13 @@ namespace LudoGame.EditorTools
             var board = new Board3D(null);
             created.Add(board.Root.gameObject);
             int taps = 0;
+            var savedStyle = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes);
             try
             {
+                foreach (var look in new[] { PawnLook.Classic, PawnLook.Outline, PawnLook.OutlineCoin })
                 for (int rotation = 0; rotation < 4; rotation++)
                 {
+                    PawnStyle.Apply(look, true);
                     board.SetRotationSteps(rotation);
                     foreach (var (name, pieces) in scenarios)
                     {
@@ -237,7 +240,7 @@ namespace LudoGame.EditorTools
                             {
                                 taps++;
                                 var picked = PawnPicker.Pick(tap, pawns, rig);
-                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, board turned {rotation * 90} deg) picked "
+                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, {look} pawns, board turned {rotation * 90} deg) picked "
                                     + (picked == null ? "nothing" : $"{picked.Color} pawn {picked.Index}"));
                             }
                         }
@@ -250,6 +253,7 @@ namespace LudoGame.EditorTools
             }
             finally
             {
+                (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes) = savedStyle;
                 foreach (var o in created) UnityEngine.Object.DestroyImmediate(o);
             }
             Debug.Log($"[Ludo] Tap check: {taps} simulated taps on glowing pawns");

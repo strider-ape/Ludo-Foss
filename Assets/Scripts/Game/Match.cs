@@ -86,6 +86,8 @@ namespace LudoGame
                 break;
             }
             board.SetRotationSteps(rotationSteps);
+            board.SetShapesVisible(GameSettings.ColorShapes);
+            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
 
             pieces = new GameObject("Pieces").transform;
             pieces.SetParent(board.Root, false);
@@ -115,6 +117,7 @@ namespace LudoGame
             hint = Ui.Label(transform, "", 44, new Color(1f, 1f, 1f, 0.9f), new Vector2(1000, 80), Vector2.zero);
             skipButton = Ui.Button(transform, "SKIP TO RESULTS", Palette.Button, new Vector2(560, 110), Vector2.zero, OnSkip, 44);
             skipButton.gameObject.SetActive(false);
+            badgeLayer = Ui.Fill("Badges", transform);
             toastBg = Ui.Image("Toast", transform, SpriteFactory.Rounded, new Color(0.05f, 0.07f, 0.16f, 0.9f), new Vector2(820, 150), Vector2.zero, sliced: true);
             toast = Ui.Label(toastBg.transform, "", 52, Palette.Text, new Vector2(780, 140), Vector2.zero);
             toastBg.gameObject.SetActive(false);
@@ -160,6 +163,7 @@ namespace LudoGame
             hint.rectTransform.anchoredPosition = new Vector2(0f, lowest - 70f);
             ((RectTransform)skipButton.transform).anchoredPosition = new Vector2(0f, lowest - 110f);
             toastBg.rectTransform.anchoredPosition = ToCanvas(rig.WorldToScreen(Vector3.zero));
+            PositionBadges();
             dice.MoveTo(diceSpots[(int)state.Current], 0f);
         }
 
@@ -591,6 +595,7 @@ namespace LudoGame
         IEnumerator AnimateMove(Move m)
         {
             var pawn = pawns[(int)m.Player, m.Token];
+            HideBadges();
             pawn.ApplyBaseScale(1f);
             if (m.LeavesBase)
             {
@@ -605,7 +610,7 @@ namespace LudoGame
             }
         }
 
-        /// <summary>Places every pawn, fanning out pawns that share a square.</summary>
+        /// <summary>Places every pawn, fanning out pawns that share a square and labelling the stack with its count.</summary>
         void LayoutTokens(float duration)
         {
             var groups = new Dictionary<Vector2Int, List<Pawn3D>>();
@@ -617,6 +622,7 @@ namespace LudoGame
                 if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<Pawn3D>();
                 list.Add(pawn);
             }
+            stacks.Clear();
             foreach (var pair in groups)
             {
                 var list = pair.Value;
@@ -626,13 +632,68 @@ namespace LudoGame
                     StartCoroutine(list[0].SlideTo(centre, 1f, duration));
                     continue;
                 }
+                stacks.Add((centre, list.Count));
                 for (int i = 0; i < list.Count; i++)
                 {
                     float angle = Mathf.PI / 4f + i * Mathf.PI * 2f / list.Count;
-                    var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 0.22f;
-                    StartCoroutine(list[i].SlideTo(centre + offset, 0.75f, duration));
+                    var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 0.25f;
+                    StartCoroutine(list[i].SlideTo(centre + offset, PawnStyle.StackScale, duration));
                 }
             }
+            ShowBadges();
+        }
+
+        // ---------- Stack badges ----------
+
+        /// <summary>Squares holding more than one pawn (board-local centre, count).</summary>
+        readonly List<(Vector3 centre, int count)> stacks = new List<(Vector3, int)>();
+        readonly List<(RectTransform rt, Text label)> badges = new List<(RectTransform, Text)>();
+        RectTransform badgeLayer;
+
+        void ShowBadges()
+        {
+            while (badges.Count < stacks.Count)
+            {
+                var disc = Ui.Image("Badge", badgeLayer, SpriteFactory.Circle, Color.white, new Vector2(60f, 60f), Vector2.zero);
+                Ui.Image("Fill", disc.transform, SpriteFactory.Circle, new Color(0.09f, 0.11f, 0.24f), new Vector2(50f, 50f), Vector2.zero);
+                var label = Ui.Label(disc.transform, "", 36, Color.white, new Vector2(60f, 60f), new Vector2(0f, 1f), TextAnchor.MiddleCenter, shadow: false);
+                badges.Add((disc.rectTransform, label));
+            }
+            for (int i = 0; i < badges.Count; i++)
+            {
+                bool used = i < stacks.Count;
+                badges[i].rt.gameObject.SetActive(used);
+                if (used) badges[i].label.text = stacks[i].count.ToString();
+            }
+            PositionBadges();
+        }
+
+        /// <summary>Keeps each badge just above and to the right of its stack.</summary>
+        void PositionBadges()
+        {
+            for (int i = 0; i < stacks.Count && i < badges.Count; i++)
+            {
+                var anchor = board.World(stacks[i].centre) + Vector3.up * (1.25f * PawnStyle.Size * PawnStyle.StackScale) + rig.transform.right * 0.6f;
+                badges[i].rt.anchoredPosition = ToCanvas(rig.WorldToScreen(anchor));
+            }
+        }
+
+        void HideBadges()
+        {
+            foreach (var (rt, _) in badges) rt.gameObject.SetActive(false);
+        }
+
+        /// <summary>Applies pawn style and colour-shape settings changed mid-game.</summary>
+        public void ApplyLook()
+        {
+            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
+            board.SetShapesVisible(GameSettings.ColorShapes);
+            foreach (var pawn in pawns)
+            {
+                if (pawn != null) pawn.RefreshStyle();
+            }
+            foreach (var card in cards) card.SetShapeVisible(GameSettings.ColorShapes);
+            PositionBadges();
         }
 
         void Toast(string message, float seconds = 1.5f)
@@ -716,6 +777,7 @@ namespace LudoGame
             readonly Image glow;
             readonly Image timer;
             readonly Image crown;
+            readonly Image shape;
             readonly Text status;
             readonly bool active;
 
@@ -732,7 +794,9 @@ namespace LudoGame
                 button.targetGraphic = bg;
                 button.onClick.AddListener(() => onTap());
                 var avatarPos = new Vector2(-Width * 0.5f + 70f, 0f);
-                Ui.Avatar(Rt, active ? Palette.Of(c) : Palette.ButtonMuted, 104f, avatarPos);
+                var avatar = Ui.Avatar(Rt, active ? Palette.Of(c) : Palette.ButtonMuted, 104f, avatarPos);
+                shape = Ui.ShapeBadge(avatar, c, 104f);
+                SetShapeVisible(GameSettings.ColorShapes);
                 timer = Ui.Image("Timer", Rt, SpriteFactory.Ring, Color.white, new Vector2(128f, 128f), avatarPos);
                 timer.type = Image.Type.Filled;
                 timer.fillMethod = Image.FillMethod.Radial360;
@@ -745,6 +809,8 @@ namespace LudoGame
                 status = Ui.Label(Rt, Palette.Name(c), 30, active ? Palette.LightOf(c) : Palette.ButtonMuted, new Vector2(190f, 40f), new Vector2(64f, -28f), TextAnchor.MiddleLeft, shadow: false);
                 SetFocus(false);
             }
+
+            public void SetShapeVisible(bool on) => shape.gameObject.SetActive(on && active);
 
             public void SetFocus(bool on)
             {

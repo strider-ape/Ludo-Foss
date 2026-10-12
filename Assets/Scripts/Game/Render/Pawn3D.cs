@@ -4,6 +4,36 @@ using UnityEngine;
 
 namespace LudoGame
 {
+    /// <summary>How pawns are drawn; tunable so the board stays readable on small phone screens.</summary>
+    public static class PawnStyle
+    {
+        /// <summary>Pawn size relative to the mesh (a board cell is 1 unit).</summary>
+        public static float Size = 1.25f;
+
+        /// <summary>A dark cartoon outline around each pawn.</summary>
+        public static bool Outline;
+
+        /// <summary>A white coin with a dark rim under each pawn.</summary>
+        public static bool Coin;
+
+        /// <summary>Scale of pawns sharing a square.</summary>
+        public static float StackScale = 0.75f;
+
+        /// <summary>The colour-blind shape (circle, triangle, square, star) on each pawn's head.</summary>
+        public static bool Shapes;
+
+        /// <summary>Sets the style from the player's settings.</summary>
+        public static void Apply(PawnLook look, bool shapes)
+        {
+            bool classic = look == PawnLook.Classic;
+            Size = classic ? 1.25f : 1.45f;
+            Outline = !classic;
+            Coin = look == PawnLook.OutlineCoin;
+            StackScale = classic ? 0.75f : 0.85f;
+            Shapes = shapes;
+        }
+    }
+
     /// <summary>
     /// A glossy 3D pawn. The root slides over the board; the body hops, squashes and spins; a soft shadow and
     /// a pulsing ring stay flat on the board.
@@ -17,19 +47,22 @@ namespace LudoGame
         static Material[] bodyMaterials;
         static Material shadowMaterial;
         static Material ringMaterial;
+        static Material outlineMaterial;
+        static Material coinMaterial;
+        static readonly Material[] shapeMaterials = new Material[GameState.Players];
 
         public PlayerColor Color { get; private set; }
         public int Index { get; private set; }
         public Transform Body { get; private set; }
 
-        /// <summary>Overall pawn size relative to the mesh (a board cell is 1 unit).</summary>
-        const float Size = 1.25f;
+        static float Size => PawnStyle.Size;
 
         /// <summary>1 normally, smaller when sharing a square with other pawns.</summary>
         public float BaseScale { get; private set; } = 1f;
 
         Transform shadow;
         Transform ring;
+        Transform decorations;
         MeshRenderer ringRenderer;
         MaterialPropertyBlock block;
         bool selectable;
@@ -91,6 +124,7 @@ namespace LudoGame
             body.AddComponent<MeshFilter>().sharedMesh = bodyMesh;
             body.AddComponent<MeshRenderer>().sharedMaterial = bodyMaterials[(int)color];
             Body = body.transform;
+            BuildDecorations();
 
             // The shadow falls away from the light, in world space regardless of how the board is turned.
             var away = new Vector3(-Materials.LightDir.x, 0f, -Materials.LightDir.z) * 0.12f;
@@ -100,6 +134,52 @@ namespace LudoGame
             ringRenderer = ring.GetComponent<MeshRenderer>();
             ringRenderer.enabled = false;
             ApplyBaseScale(1f);
+        }
+
+        /// <summary>Outline, coin and colour shape, all riding on the body so they hop and tumble with it.</summary>
+        void BuildDecorations()
+        {
+            decorations = new GameObject("Decorations").transform;
+            decorations.SetParent(Body, false);
+            if (PawnStyle.Outline)
+            {
+                if (outlineMaterial == null) outlineMaterial = Materials.Outline(new UnityEngine.Color(0.07f, 0.09f, 0.19f), 0.035f);
+                var outline = new GameObject("Outline");
+                outline.transform.SetParent(decorations, false);
+                outline.AddComponent<MeshFilter>().sharedMesh = bodyMesh;
+                outline.AddComponent<MeshRenderer>().sharedMaterial = outlineMaterial;
+            }
+            if (PawnStyle.Coin)
+            {
+                if (coinMaterial == null) coinMaterial = Materials.Unlit(SpriteFactory.Puck, UnityEngine.Color.white, true, 4);
+                // Just above the board's painted squares (which sit up to 0.04 high), a little wider than the base.
+                AddDecal("Coin", coinMaterial, 0.035f, 0.95f);
+            }
+            if (PawnStyle.Shapes)
+            {
+                int c = (int)Color;
+                if (shapeMaterials[c] == null) shapeMaterials[c] = Materials.Unlit(SpriteFactory.ShapeOf(Color).texture, UnityEngine.Color.white, true, 8);
+                // A small white shape lying on top of the head.
+                AddDecal("Shape", shapeMaterials[c], 1.01f, 0.32f);
+            }
+        }
+
+        void AddDecal(string name, Material material, float y, float size)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(decorations, false);
+            go.transform.localPosition = new Vector3(0f, y, 0f);
+            go.transform.localScale = new Vector3(size, 1f, size);
+            go.AddComponent<MeshFilter>().sharedMesh = quad;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        /// <summary>Rebuilds outline, coin, shape and size after the pawn style setting changes.</summary>
+        public void RefreshStyle()
+        {
+            if (decorations != null) Destroy(decorations.gameObject);
+            BuildDecorations();
+            ApplyBaseScale(BaseScale);
         }
 
         float ShadowSize => 1.05f * Size * BaseScale;

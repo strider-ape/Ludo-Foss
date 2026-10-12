@@ -104,6 +104,15 @@ namespace LudoGame
             if (press != null) press.SetEdge(Palette.Darken(color, 0.68f));
         }
 
+        /// <summary>A small dark disc with the colour's white shape, tucked onto an avatar's bottom-right edge.</summary>
+        public static Image ShapeBadge(Transform avatar, Core.PlayerColor c, float avatarSize)
+        {
+            float size = avatarSize * 0.42f;
+            var disc = Image("Shape", avatar, SpriteFactory.Circle, new Color(0.08f, 0.1f, 0.22f), new Vector2(size, size), new Vector2(avatarSize * 0.34f, -avatarSize * 0.34f));
+            Image("Icon", disc.transform, SpriteFactory.ShapeOf(c), Color.white, new Vector2(size * 0.6f, size * 0.6f), Vector2.zero);
+            return disc;
+        }
+
         /// <summary>A coloured circle with a friendly face, used for player avatars.</summary>
         public static RectTransform Avatar(Transform parent, Color color, float size, Vector2 pos)
         {
