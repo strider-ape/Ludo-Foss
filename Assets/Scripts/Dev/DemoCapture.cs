@@ -44,6 +44,8 @@ namespace LudoGame
             root.DemoStartMatch(new[] { SeatType.Human, SeatType.Computer, SeatType.Computer, SeatType.Computer });
 
             bool previewShot = false, matchShot = false;
+            int tapsChecked = 0;
+            var tapFailures = new System.Text.StringBuilder();
             float start = Time.realtimeSinceStartup;
             while (Time.realtimeSinceStartup < start + 300f && GameObject.Find("Results") == null)
             {
@@ -62,6 +64,7 @@ namespace LudoGame
                         yield return Capture("3-preview.png");
                         previewShot = true;
                     }
+                    tapsChecked += match.DemoCheckTaps(tapFailures);
                     match.DemoPick();
                 }
                 if (!matchShot && (previewShot && elapsed > 25f || elapsed > 70f))
@@ -73,6 +76,9 @@ namespace LudoGame
                 if (matchShot && match.CanSkip) match.DemoSkip();
                 yield return null;
             }
+            Debug.Log(tapFailures.Length == 0
+                ? $"[Ludo] Tap check passed: {tapsChecked} taps on glowing pawns all picked the tapped pawn"
+                : $"[Ludo] TAP CHECK FAILED ({tapsChecked} taps checked):\n{tapFailures}");
             yield return new WaitForSecondsRealtime(0.8f);
             yield return Capture("5-results.png");
             Application.Quit();

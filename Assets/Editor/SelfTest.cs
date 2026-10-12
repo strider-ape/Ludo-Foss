@@ -23,6 +23,7 @@ namespace LudoGame.EditorTools
             Simulate(400);
             CheckPlayOut();
             CheckSaveRoundTrip();
+            CheckTapTargets();
             Debug.Log(failures == 0 ? "[Ludo] SELF TEST PASSED" : $"[Ludo] SELF TEST FAILED ({failures} failures)");
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
@@ -179,6 +180,79 @@ namespace LudoGame.EditorTools
                 var first = AutoPlay.PlayOut(quick, bot, rng, true, false);
                 Check(quick.Finished.Count == 1 && first[0] == quick.Finished[0] && first.Count == 4, $"first-winner play-out {g} stops at one winner");
             }
+        }
+
+        /// <summary>
+        /// Builds the real board, camera and pawns at phone resolution and taps each glowing pawn at its base, middle and
+        /// head: the tapped pawn must be the one picked, in every board orientation. Covers a pawn standing exactly on
+        /// another pawn's landing square (the rolled number equals the gap between them).
+        /// </summary>
+        static void CheckTapTargets()
+        {
+            var red = PlayerColor.Red;
+            var scenarios = new (string name, (PlayerColor color, int token, int progress, bool selectable)[] pieces)[]
+            {
+                ("one roll apart", new[] { (red, 0, 10, true), (red, 1, 14, true) }),
+                ("six apart", new[] { (red, 0, 20, true), (red, 1, 26, true) }),
+                ("one roll apart at the home turn", new[] { (red, 0, 46, true), (red, 1, 50, true) }),
+                ("one roll apart into the home column", new[] { (red, 0, 49, true), (red, 1, 53, true) }),
+                ("neighbouring squares", new[] { (red, 0, 2, true), (red, 1, 3, true) }),
+                ("diagonal corner", new[] { (red, 0, 4, true), (red, 1, 5, true), (red, 2, 6, true) }),
+                ("base slots", new[] { (red, 0, -1, true), (red, 1, -1, true), (red, 2, -1, true), (red, 3, -1, true) }),
+                ("opponent beside", new[] { (red, 0, 30, true), (PlayerColor.Green, 0, 18, false), (red, 1, 32, true) }),
+            };
+
+            var created = new List<UnityEngine.Object>();
+            var target = new RenderTexture(1080, 2340, 16);
+            created.Add(target);
+            var rig = CameraRig.Create();
+            created.Add(rig.gameObject);
+            var table = GameObject.Find("Table");
+            if (table != null) created.Add(table);
+            rig.Cam.targetTexture = target;
+            rig.Frame();
+            var board = new Board3D(null);
+            created.Add(board.Root.gameObject);
+            int taps = 0;
+            try
+            {
+                for (int rotation = 0; rotation < 4; rotation++)
+                {
+                    board.SetRotationSteps(rotation);
+                    foreach (var (name, pieces) in scenarios)
+                    {
+                        var pawns = new Pawn3D[GameState.Players, GameState.TokensPerPlayer];
+                        foreach (var (color, token, progress, selectable) in pieces)
+                        {
+                            var pawn = Pawn3D.Create(board.Root, color, token);
+                            pawn.transform.localPosition = board.TokenLocal(color, token, progress);
+                            pawn.SetSelectable(selectable);
+                            pawns[(int)color, token] = pawn;
+                        }
+                        foreach (var pawn in pawns)
+                        {
+                            if (pawn == null || !pawn.IsSelectable) continue;
+                            PawnPicker.ScreenSpan(pawn, rig, out var foot, out var head);
+                            foreach (var tap in new[] { foot, Vector2.Lerp(foot, head, 0.5f), head })
+                            {
+                                taps++;
+                                var picked = PawnPicker.Pick(tap, pawns, rig);
+                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, board turned {rotation * 90} deg) picked "
+                                    + (picked == null ? "nothing" : $"{picked.Color} pawn {picked.Index}"));
+                            }
+                        }
+                        foreach (var pawn in pawns)
+                        {
+                            if (pawn != null) UnityEngine.Object.DestroyImmediate(pawn.gameObject);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                foreach (var o in created) UnityEngine.Object.DestroyImmediate(o);
+            }
+            Debug.Log($"[Ludo] Tap check: {taps} simulated taps on glowing pawns");
         }
 
         /// <summary>A saved game must come back exactly as it was.</summary>

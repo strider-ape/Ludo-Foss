@@ -55,7 +55,7 @@ namespace LudoGame
         readonly PlayerCard[] cards = new PlayerCard[GameState.Players];
         readonly string[] names = new string[GameState.Players];
         readonly Vector3[] diceSpots = new Vector3[GameState.Players];
-        readonly List<(Transform marker, int from)> markers = new List<(Transform, int)>();
+        readonly List<Transform> markers = new List<Transform>();
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
         readonly System.Random rng = new System.Random();
 
@@ -189,40 +189,8 @@ namespace LudoGame
                 return;
             }
             if (!picking) return;
-
-            // Tap a glowing pawn, or the marker where it would land.
-            Pawn3D best = null;
-            float bestDistance = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude * 0.9f;
-            foreach (var pawn in pawns)
-            {
-                if (pawn == null || !pawn.IsSelectable) continue;
-                float d = (tap - rig.WorldToScreen(pawn.Body.position + Vector3.up * 0.4f)).magnitude;
-                if (d < bestDistance)
-                {
-                    bestDistance = d;
-                    best = pawn;
-                }
-            }
-            foreach (var (marker, from) in markers)
-            {
-                float d = (tap - rig.WorldToScreen(marker.position)).magnitude;
-                if (d >= bestDistance) continue;
-                var owner = PawnAt(current, from);
-                if (owner == null) continue;
-                bestDistance = d;
-                best = owner;
-            }
-            if (best != null) tapped = best;
-        }
-
-        Pawn3D PawnAt(PlayerColor color, int progress)
-        {
-            for (int t = 0; t < GameState.TokensPerPlayer; t++)
-            {
-                var pawn = pawns[(int)color, t];
-                if (pawn != null && pawn.IsSelectable && state.Get(color, t) == progress) return pawn;
-            }
-            return null;
+            var picked = PawnPicker.Pick(tap, pawns, rig);
+            if (picked != null) tapped = picked;
         }
 
         static bool PointerOverUi()
@@ -551,7 +519,7 @@ namespace LudoGame
                 if (capture) AddQuad(marker, burstMaterial, 0.75f, null, 0.01f, true);
                 else if (home) AddQuad(marker, crownMaterial, 0.75f, null, 0.01f, true);
                 else if (safe) AddQuad(marker, shieldMaterial, 0.62f, null, 0.01f, true);
-                markers.Add((marker, m.From));
+                markers.Add(marker);
 
                 if (GameSettings.Preview != PreviewMode.MarkerAndPath) continue;
                 var dot = Palette.DarkOf(m.Player);
@@ -594,7 +562,7 @@ namespace LudoGame
         {
             if (markers.Count == 0) return;
             float s = 0.92f + 0.12f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f));
-            foreach (var (marker, _) in markers) marker.localScale = new Vector3(s, 1f, s);
+            foreach (var marker in markers) marker.localScale = new Vector3(s, 1f, s);
         }
 
         void ClearPreview()
@@ -708,6 +676,33 @@ namespace LudoGame
         }
 
         internal void DemoSkip() => OnSkip();
+
+        /// <summary>
+        /// Taps each glowing pawn at its base, middle and head and checks that pawn is the one picked.
+        /// Pawns sharing a square count as the same choice, since they make the same move.
+        /// </summary>
+        internal int DemoCheckTaps(System.Text.StringBuilder failures)
+        {
+            int checkedTaps = 0;
+            foreach (var pawn in pawns)
+            {
+                if (pawn == null || !pawn.IsSelectable) continue;
+                PawnPicker.ScreenSpan(pawn, rig, out var foot, out var head);
+                foreach (var tap in new[] { foot, Vector2.Lerp(foot, head, 0.5f), head })
+                {
+                    checkedTaps++;
+                    var picked = PawnPicker.Pick(tap, pawns, rig);
+                    bool same = picked == pawn
+                        || picked != null && state.Get(picked.Color, picked.Index) == state.Get(pawn.Color, pawn.Index);
+                    if (!same)
+                    {
+                        failures.AppendLine($"tap on {pawn.Color} pawn {pawn.Index} (progress {state.Get(pawn.Color, pawn.Index)}) picked "
+                            + (picked == null ? "nothing" : $"{picked.Color} pawn {picked.Index} (progress {state.Get(picked.Color, picked.Index)})"));
+                    }
+                }
+            }
+            return checkedTaps;
+        }
 
         /// <summary>Avatar, name, colour, place and turn timer for one player, beside their corner of the board.</summary>
         sealed class PlayerCard
