@@ -113,7 +113,17 @@ Add `-demo-capture <folder>` to have it play a computer-only match, save four sc
 
 ## Install on your phone
 
-Copy `Builds/LudoFOSS.apk` to the phone, open it, and allow "Install unknown apps" for your file manager when Android asks.
+1. On your phone, open the **[latest release](https://github.com/strider-ape/Ludo-Foss/releases/latest)** and download `LudoFOSS-vX.Y.Z.apk`.
+2. Open the downloaded file. Android asks to allow **Install unknown apps** for your browser or file manager: allow it once.
+3. Tap **Install**, then open **Ludo FOSS**.
+
+**Updating:** install the new APK over the old one; your saved game and settings stay. Only v0.3.0 needs uninstalling first, because it was signed with a temporary key.
+
+**Automatic updates (optional):** [Obtainium](https://github.com/ImranR98/Obtainium) can watch this repository and update the game for you. Add `https://github.com/strider-ape/Ludo-Foss` as an app.
+
+**Check a download (optional):** every release lists the APK's SHA-256 and the signing certificate. Official builds are always signed by `CN=Ludo FOSS, O=strider-ape` (certificate SHA-256 `2e:d6:35:9e:5a:42:b1:d7:95:f7:2e:d3:db:37:64:17:8d:4d:61:d4:16:1d:83:a4:ee:5c:14:fd:87:a4:b0:d6`).
+
+Building it yourself instead? See [Build the APK](#build-the-apk); the file lands in `Builds/LudoFOSS.apk`.
 
 ## Adding mods
 
