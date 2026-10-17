@@ -20,6 +20,7 @@ namespace LudoGame.EditorTools
             failures = 0;
             CheckGeometry();
             CheckRules();
+            CheckTurnOrder();
             Simulate(400);
             CheckPlayOut();
             CheckSaveRoundTrip();
@@ -69,6 +70,20 @@ namespace LudoGame.EditorTools
         }
 
         static GameState TwoPlayer() => new GameState(new[] { SeatType.Human, SeatType.Human, SeatType.Off, SeatType.Off });
+
+        static void CheckTurnOrder()
+        {
+            var all = new GameState(new[] { SeatType.Human, SeatType.Human, SeatType.Human, SeatType.Human });
+            Check(all.Current == PlayerColor.Blue, "Blue moves first");
+            var order = new List<PlayerColor> { all.Current };
+            for (int i = 0; i < 3; i++)
+            {
+                all.PassTurn();
+                order.Add(all.Current);
+            }
+            Check(string.Join(",", order) == "Blue,Red,Green,Yellow", "turns go clockwise: Blue, Red, Green, Yellow (got " + string.Join(",", order) + ")");
+            Check(TwoPlayer().Current == PlayerColor.Red, "without Blue, the next colour clockwise (Red) starts");
+        }
 
         static void CheckRules()
         {

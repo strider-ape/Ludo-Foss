@@ -104,50 +104,86 @@ namespace LudoGame
             dim.raycastTarget = true;
 
             Ui.Label(screen, AppInfo.Name.ToUpperInvariant(), 150, Palette.Text, new Vector2(1040, 190), new Vector2(0, 720));
-            for (int p = 0; p < GameState.Players; p++)
+            for (int i = 0; i < MenuOrder.Length; i++)
             {
-                var avatar = Ui.Avatar(screen, Palette.Of((PlayerColor)p), 96f, new Vector2(-195f + p * 130f, 575f));
-                if (GameSettings.ColorShapes) Ui.ShapeBadge(avatar, (PlayerColor)p, 96f);
+                var avatar = Ui.Avatar(screen, Palette.Of(MenuOrder[i]), 96f, new Vector2(-195f + i * 130f, 575f));
+                if (GameSettings.ColorShapes) Ui.ShapeBadge(avatar, MenuOrder[i], 96f);
             }
             Ui.Label(screen, "No ads  -  No tracking  -  Just Ludo", 40, new Color(1f, 1f, 1f, 0.75f), new Vector2(1000, 60), new Vector2(0, 470), TextAnchor.MiddleCenter, shadow: false);
 
             Ui.Label(screen, "WHO'S PLAYING?", 46, Palette.Gold, new Vector2(1000, 60), new Vector2(0, 375));
-            for (int p = 0; p < GameState.Players; p++)
-            {
-                var color = (PlayerColor)p;
-                Button seatButton = null;
-                seatButton = Ui.Button(screen, SeatLabel(color), SeatColor(color), new Vector2(820, 108), new Vector2(0, 280 - p * 130), () =>
-                {
-                    seats[(int)color] = seats[(int)color] == SeatType.Human ? SeatType.Computer
-                        : seats[(int)color] == SeatType.Computer ? SeatType.Off : SeatType.Human;
-                    GameSettings.SetSeat(color, seats[(int)color]);
-                    Ui.SetText(seatButton, SeatLabel(color));
-                    Ui.SetColor(seatButton, SeatColor(color));
-                }, 46);
-            }
-            Ui.Label(screen, "Tap a colour to switch Player / Computer / Off", 30, new Color(1f, 1f, 1f, 0.55f), new Vector2(1000, 44), new Vector2(0, -205), TextAnchor.MiddleCenter, shadow: false);
+            for (int i = 0; i < MenuOrder.Length; i++) BuildSeatRow(MenuOrder[i], 280 - i * 130);
 
-            BuildSpeedRow(screen, -350);
+            BuildSpeedRow(screen, -300);
             bool canContinue = GameSettings.ResumeGames && SaveGame.Exists;
             if (canContinue)
             {
                 Ui.Button(screen, "CONTINUE", PlayGreen, new Vector2(620, 150), new Vector2(0, -545), ContinueMatch, 76);
-                Ui.Button(screen, "NEW GAME", Palette.Button, new Vector2(500, 110), new Vector2(0, -705), () => StartMatch(null), 50);
+                newGameButton = Ui.Button(screen, "NEW GAME", Palette.Button, new Vector2(500, 110), new Vector2(0, -705), () => StartMatch(null), 50);
+                newGameLabel = "NEW GAME";
+                newGameColor = Palette.Button;
                 Ui.Button(screen, "SETTINGS", Palette.ButtonMuted, new Vector2(420, 90), new Vector2(0, -835), OpenSettings, 38);
             }
             else
             {
-                Ui.Button(screen, "PLAY", PlayGreen, new Vector2(620, 170), new Vector2(0, -560), () => StartMatch(null), 84);
+                newGameButton = Ui.Button(screen, "PLAY", PlayGreen, new Vector2(620, 170), new Vector2(0, -560), () => StartMatch(null), 84);
+                newGameLabel = "PLAY";
+                newGameColor = PlayGreen;
                 Ui.Button(screen, "SETTINGS", Palette.ButtonMuted, new Vector2(420, 96), new Vector2(0, -760), OpenSettings, 40);
+            }
+            UpdateNewGameButton();
+        }
+
+        /// <summary>Colours listed in board order: Blue (bottom-left), then clockwise Red, Green, Yellow.</summary>
+        static readonly PlayerColor[] MenuOrder = { PlayerColor.Blue, PlayerColor.Red, PlayerColor.Green, PlayerColor.Yellow };
+
+        static readonly SeatType[] SeatChoices = { SeatType.Human, SeatType.Computer, SeatType.Off };
+        static readonly string[] SeatNames = { "Player", "Computer", "Off" };
+
+        Button newGameButton;
+        string newGameLabel;
+        Color newGameColor;
+
+        /// <summary>One colour: avatar and name, then Player / Computer / Off side by side; the chosen one is lit.</summary>
+        void BuildSeatRow(PlayerColor c, float y)
+        {
+            var avatar = Ui.Avatar(screen, Palette.Of(c), 84f, new Vector2(-448f, y));
+            if (GameSettings.ColorShapes) Ui.ShapeBadge(avatar, c, 84f);
+            Ui.Label(screen, Palette.Name(c), 40, Palette.Text, new Vector2(200f, 60f), new Vector2(-292f, y), TextAnchor.MiddleLeft);
+            var buttons = new Button[SeatChoices.Length];
+            for (int k = 0; k < SeatChoices.Length; k++)
+            {
+                var choice = SeatChoices[k];
+                buttons[k] = Ui.Button(screen, SeatNames[k], Palette.ButtonMuted, new Vector2(196f, 92f), new Vector2(-24f + k * 212f, y), () =>
+                {
+                    seats[(int)c] = choice;
+                    GameSettings.SetSeat(c, choice);
+                    PaintSeatRow(c, buttons);
+                    UpdateNewGameButton();
+                }, 34);
+            }
+            PaintSeatRow(c, buttons);
+        }
+
+        void PaintSeatRow(PlayerColor c, Button[] buttons)
+        {
+            for (int k = 0; k < buttons.Length; k++)
+            {
+                bool chosen = seats[(int)c] == SeatChoices[k];
+                var lit = SeatChoices[k] == SeatType.Off ? new Color(0.6f, 0.64f, 0.72f) : Palette.Of(c);
+                Ui.SetColor(buttons[k], chosen ? lit : Palette.ButtonMuted);
             }
         }
 
-        Color SeatColor(PlayerColor c) => seats[(int)c] == SeatType.Off ? Palette.ButtonMuted : Palette.Of(c);
-
-        string SeatLabel(PlayerColor c)
+        /// <summary>PLAY / NEW GAME says so when fewer than two colours are playing.</summary>
+        void UpdateNewGameButton()
         {
-            string who = seats[(int)c] == SeatType.Human ? "Player" : seats[(int)c] == SeatType.Computer ? "Computer" : "Off";
-            return Palette.Name(c) + "  -  " + who;
+            if (newGameButton == null) return;
+            int active = 0;
+            foreach (var s in seats) if (s != SeatType.Off) active++;
+            bool ok = active >= 2;
+            Ui.SetText(newGameButton, ok ? newGameLabel : "NEED 2+");
+            Ui.SetColor(newGameButton, ok ? newGameColor : Palette.ButtonMuted);
         }
 
         void ContinueMatch()

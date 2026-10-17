@@ -158,6 +158,8 @@ namespace LudoGame.EditorTools
                 Save(sizes, Path.Combine(folder, "compare-board-size.png"));
                 UnityEngine.Object.DestroyImmediate(sizes);
 
+                RenderMenu(folder, rig, target, board);
+
                 // The flat die's six faces, on the game's background.
                 var faces = new List<Texture2D>();
                 for (int v = 1; v <= 6; v++)
@@ -186,6 +188,48 @@ namespace LudoGame.EditorTools
                 }
                 foreach (var t in fullShots) UnityEngine.Object.DestroyImmediate(t);
                 foreach (var o in created) UnityEngine.Object.DestroyImmediate(o);
+            }
+        }
+
+        /// <summary>
+        /// Renders the real main menu: builds it with GameRoot's own code onto a canvas drawn by the board camera
+        /// (the game itself uses an overlay canvas, which a render texture can't capture).
+        /// </summary>
+        static void RenderMenu(string folder, CameraRig rig, RenderTexture target, Board3D board)
+        {
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var canvasGo = new GameObject("MenuCanvas", typeof(RectTransform));
+            var host = new GameObject("MenuHost");
+            try
+            {
+                rig.ResetZoom(0f);
+                var canvas = canvasGo.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                canvas.worldCamera = rig.Cam;
+                canvas.planeDistance = rig.Cam.nearClipPlane + 0.5f;
+                canvas.sortingOrder = short.MaxValue; // draw after the board's see-through parts, like the overlay does
+                var scaler = canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
+                scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1080, 1920);
+                scaler.screenMatchMode = UnityEngine.UI.CanvasScaler.ScreenMatchMode.Expand;
+
+                var root = host.AddComponent<GameRoot>();
+                typeof(GameRoot).GetField("canvas", flags).SetValue(root, (RectTransform)canvasGo.transform);
+                typeof(GameRoot).GetField("board", flags).SetValue(root, board);
+                typeof(GameRoot).GetField("rig", flags).SetValue(root, rig);
+                var seats = (SeatType[])typeof(GameRoot).GetField("seats", flags).GetValue(root);
+                for (int p = 0; p < GameState.Players; p++) seats[p] = GameSettings.GetSeat((PlayerColor)p);
+                typeof(GameRoot).GetMethod("ShowMenu", flags).Invoke(root, null);
+
+                Canvas.ForceUpdateCanvases();
+                var shot = Capture(rig.Cam, target);
+                Save(shot, Path.Combine(folder, "menu.png"));
+                UnityEngine.Object.DestroyImmediate(shot);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+                UnityEngine.Object.DestroyImmediate(canvasGo);
             }
         }
 

@@ -17,9 +17,9 @@ A free, open-source Ludo game for Android. 3D board, smooth animations, your own
 
 - **3D board and pieces**: glossy pawns that hop square to square, a die that really tumbles, confetti when a pawn gets home, a knock-back with a little screen shake on captures
 - **Speed control** from 1x (classic pace) up to **Instant**, adjustable mid-game
-- **Play vs computer**: any colour can be a bot
+- **Play vs computer**: on the menu, set each colour to Player, Computer or Off
 - **Pass & play**: 2 to 4 people on one phone
-- **Classic layout**: Blue bottom-left, then clockwise Red, Green and Yellow, every game
+- **Classic layout**: Blue bottom-left, then clockwise Red, Green and Yellow, every game. Blue moves first
 - **Classic rules**: a 6 to leave base, an extra turn on a 6, a capture or reaching home, safe star squares, an exact roll to finish
 
 Every helper below can be switched on or off in Settings:

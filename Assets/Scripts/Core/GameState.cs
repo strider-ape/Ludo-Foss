@@ -47,7 +47,8 @@ namespace LudoGame.Core
             {
                 throw new ArgumentException("At least two seats must be playing.");
             }
-            Current = PlayerColor.Red;
+            // Blue (bottom-left) moves first, then play goes clockwise: Red, Green, Yellow.
+            Current = PlayerColor.Blue;
             if (!IsActive(Current))
             {
                 Current = NextPlayer(Current);
