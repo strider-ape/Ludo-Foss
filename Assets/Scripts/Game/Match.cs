@@ -314,9 +314,9 @@ namespace LudoGame
                 var moves = Rules.LegalMoves(state, p, roll);
                 if (moves.Count == 0)
                 {
+                    // Nothing can move: no message, just a moment to see the number, then carry on.
                     StopTimer();
-                    if (human) Toast(roll == 6 ? "No moves - roll again" : "No moves");
-                    yield return Wait(Pause(0.6f));
+                    yield return Wait(Pause(0.5f));
                     if (roll != 6) state.PassTurn();
                     continue;
                 }
