@@ -4,7 +4,7 @@ using UnityEngine;
 namespace LudoGame
 {
     /// <summary>A rounded 3D die that tumbles, bounces and settles on the rolled value.</summary>
-    public sealed class Dice3D : MonoBehaviour
+    public sealed class Dice3D : MonoBehaviour, IDie
     {
         public const float Size = 1.5f;
 
@@ -170,5 +170,17 @@ namespace LudoGame
         }
 
         public Vector3 TopWorld => body.position;
+
+        public void MoveTo(Vector3 world, Vector2 canvas, float duration) => MoveTo(world, duration);
+
+        /// <summary>A tap counts if it lands within about a die's width of the die on screen.</summary>
+        public bool HitTest(Vector2 screen, CameraRig rig)
+        {
+            var top = rig.WorldToScreen(TopWorld);
+            float radius = (top - rig.WorldToScreen(TopWorld + Vector3.right * Size * 0.5f)).magnitude;
+            return (screen - top).magnitude < radius * 2f;
+        }
+
+        public void Remove() => Destroy(gameObject);
     }
 }

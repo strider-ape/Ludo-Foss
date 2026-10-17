@@ -34,7 +34,9 @@ namespace LudoGame
         RectTransform canvas;
         Transform pieces;
         Transform previewRoot;
-        Dice3D dice;
+        IDie dice;
+        RectTransform dieLayer;
+        bool rolling;
         Text hint;
         Text toast;
         Image toastBg;
@@ -55,6 +57,7 @@ namespace LudoGame
         readonly PlayerCard[] cards = new PlayerCard[GameState.Players];
         readonly string[] names = new string[GameState.Players];
         readonly Vector3[] diceSpots = new Vector3[GameState.Players];
+        readonly Vector2[] diceCanvasSpots = new Vector2[GameState.Players];
         readonly List<Transform> markers = new List<Transform>();
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
         readonly System.Random rng = new System.Random();
@@ -107,7 +110,8 @@ namespace LudoGame
                 for (int t = 0; t < GameState.TokensPerPlayer; t++) pawns[p, t] = Pawn3D.Create(pieces, c, t);
             }
             for (int i = 0; i < state.Finished.Count; i++) cards[(int)state.Finished[i]].SetPlace(i + 1);
-            dice = Dice3D.Create(null);
+            dieLayer = Ui.Fill("Die", transform);
+            CreateDie();
 
             var pause = Ui.Button(transform, "II", Palette.ButtonMuted, new Vector2(120, 110), Vector2.zero, onSettings, 54);
             var pauseRt = (RectTransform)pause.transform;
@@ -137,7 +141,7 @@ namespace LudoGame
             }
             if (pieces != null) Destroy(pieces.gameObject);
             if (previewRoot != null) Destroy(previewRoot.gameObject);
-            if (dice != null) Destroy(dice.gameObject);
+            if (dice != null) dice.Remove();
         }
 
         /// <summary>Places the player cards beside the board corners and works out where the die sits for each player.</summary>
@@ -159,6 +163,7 @@ namespace LudoGame
                 if (!top) lowest = Mathf.Min(lowest, pos.y - PlayerCard.Height * 0.5f);
 
                 var diceCanvas = pos + new Vector2((left ? 1f : -1f) * (PlayerCard.Width * 0.5f + 105f), 0f);
+                diceCanvasSpots[p] = diceCanvas;
                 if (rig.ScreenToPlane(FromCanvas(diceCanvas), Board3D.TableY + Dice3D.Size * 0.5f, out var world))
                 {
                     diceSpots[p] = new Vector3(world.x, Board3D.TableY, world.z);
@@ -168,7 +173,7 @@ namespace LudoGame
             ((RectTransform)skipButton.transform).anchoredPosition = new Vector2(0f, lowest - 110f);
             toastBg.rectTransform.anchoredPosition = ToCanvas(rig.WorldToScreen(Vector3.zero));
             PositionBadges();
-            dice.MoveTo(diceSpots[(int)state.Current], 0f);
+            dice.MoveTo(diceSpots[(int)state.Current], diceCanvasSpots[(int)state.Current], 0f);
         }
 
         Vector2 ToCanvas(Vector2 screen)
@@ -198,9 +203,7 @@ namespace LudoGame
             Vector2 tap = Input.mousePosition;
             if (awaitingRoll)
             {
-                var top = dice.TopWorld;
-                float radius = (rig.WorldToScreen(top) - rig.WorldToScreen(top + Vector3.right * Dice3D.Size * 0.5f)).magnitude;
-                if ((tap - rig.WorldToScreen(top)).magnitude < radius * 2f) rollRequested = true;
+                if (dice.HitTest(tap, rig)) rollRequested = true;
                 return;
             }
             if (!picking) return;
@@ -218,6 +221,19 @@ namespace LudoGame
         void OnCardTapped(int seat)
         {
             if (awaitingRoll && (int)current == seat) rollRequested = true;
+        }
+
+        /// <summary>Creates the die the player chose (flat on-screen or 3D on the table), replacing any current one.</summary>
+        void CreateDie()
+        {
+            bool wasRollable = dice != null && dice.IsRollable;
+            if (dice != null) dice.Remove();
+            dice = GameSettings.FlatDice
+                ? Dice2D.Create(dieLayer, () => { if (awaitingRoll) rollRequested = true; })
+                : (IDie)Dice3D.Create(null);
+            int seat = (int)state.Current;
+            dice.MoveTo(diceSpots[seat], diceCanvasSpots[seat], 0f);
+            if (wasRollable) dice.SetRollable(true);
         }
 
         // ---------- Turn loop ----------
@@ -238,7 +254,8 @@ namespace LudoGame
                 current = p;
                 FocusCard(p);
                 UpdateSkipButton();
-                dice.MoveTo(diceSpots[(int)p], Dur(0.35f));
+                if ((dice is Dice2D) != GameSettings.FlatDice) CreateDie();
+                dice.MoveTo(diceSpots[(int)p], diceCanvasSpots[(int)p], Dur(0.35f));
                 bool human = state.Seats[(int)p] == SeatType.Human;
                 bool timedOut = false;
                 if (human && GameSettings.TurnTimer > 0) StartTimer(GameSettings.TurnTimer);
@@ -274,7 +291,9 @@ namespace LudoGame
                 }
 
                 int roll = rng.Next(1, 7);
+                rolling = true;
                 yield return dice.Roll(roll, DiceDuration);
+                rolling = false;
                 Haptics.Tap(12, 70);
                 if (roll == 6)
                 {
@@ -718,6 +737,8 @@ namespace LudoGame
         /// <summary>Applies look and board-size settings changed mid-game.</summary>
         public void ApplyLook()
         {
+            // Swap the die now unless it's mid-roll; otherwise the next turn picks it up.
+            if (!rolling && (dice is Dice2D) != GameSettings.FlatDice) CreateDie();
             if (Board3D.EdgeToEdge != GameSettings.EdgeToEdge)
             {
                 board.SetEdgeToEdge(GameSettings.EdgeToEdge);

@@ -70,6 +70,13 @@ namespace LudoGame
             set => SetInt("colorShapes", value ? 1 : 0);
         }
 
+        /// <summary>A flat, face-on die on screen (easy to read) instead of the 3D die on the table.</summary>
+        public static bool FlatDice
+        {
+            get => PlayerPrefs.GetInt("flatDice", 1) == 1;
+            set => SetInt("flatDice", value ? 1 : 0);
+        }
+
         /// <summary>Thin frame, no side margins: the board fills the screen width.</summary>
         public static bool EdgeToEdge
         {

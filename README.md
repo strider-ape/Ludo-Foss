@@ -28,6 +28,7 @@ Every helper below can be switched on or off in Settings:
 - **Resume**: the game saves after every turn, so **Continue** picks up where you left off, even after the app was closed
 - **Turn timer** (off by default): 10, 15 or 30 seconds, shown as a ring around your avatar. When it runs out, the game either plays the move for you or skips the turn
 - **Pawn style**: Outline (default: bigger pawns with a dark cartoon edge, easy to see on any square, including their own colour), Outline + coin, or Classic
+- **Flat 2D dice** (default): a big, face-on die that is always easy to read; switch to the 3D die in Settings
 - **Colour shapes** for colour-blind players: circle (red), triangle (green), square (yellow) and star (blue) on pawns, bases, home triangles and avatars
 - **Bigger board** on small phones:
   - **Edge-to-edge board**: a thin frame and no side margins, so the board fills the screen width

@@ -157,6 +157,23 @@ namespace LudoGame.EditorTools
                 var sizes = SideBySide(fullShots, 24);
                 Save(sizes, Path.Combine(folder, "compare-board-size.png"));
                 UnityEngine.Object.DestroyImmediate(sizes);
+
+                // The flat die's six faces, on the game's background.
+                var faces = new List<Texture2D>();
+                for (int v = 1; v <= 6; v++)
+                {
+                    var src = SpriteFactory.DiceFace(v).texture;
+                    var flat = new Texture2D(src.width, src.height, TextureFormat.RGB24, false);
+                    var px = src.GetPixels();
+                    for (int k = 0; k < px.Length; k++) px[k] = Color.Lerp(Palette.Background, px[k], px[k].a);
+                    flat.SetPixels(px);
+                    flat.Apply();
+                    faces.Add(flat);
+                }
+                var faceSheet = SideBySide(faces, 20);
+                Save(faceSheet, Path.Combine(folder, "dice-faces.png"));
+                UnityEngine.Object.DestroyImmediate(faceSheet);
+                foreach (var f in faces) UnityEngine.Object.DestroyImmediate(f);
                 Debug.Log($"[Ludo] Board shots saved to {folder}");
             }
             finally

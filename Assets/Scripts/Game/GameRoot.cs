@@ -207,6 +207,7 @@ namespace LudoGame
             rows.Header("LOOK");
             rows.Cycle("Pawn style", new[] { "Classic", "Outline", "Outline + coin" }, () => (int)GameSettings.Pawns, i => GameSettings.Pawns = (PawnLook)i);
             rows.Toggle("Colour shapes", () => GameSettings.ColorShapes, v => GameSettings.ColorShapes = v);
+            rows.Toggle("Flat 2D dice", () => GameSettings.FlatDice, v => GameSettings.FlatDice = v);
             rows.Header("BIGGER BOARD");
             rows.Toggle("Edge-to-edge board", () => GameSettings.EdgeToEdge, v => GameSettings.EdgeToEdge = v);
             rows.Toggle("Zoom to choices", () => GameSettings.ZoomToChoices, v => GameSettings.ZoomToChoices = v);

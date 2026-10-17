@@ -75,6 +75,44 @@ namespace LudoGame
             return inside;
         }
         static Texture2D diceAtlas, radialShadow, table, puck;
+        static readonly Sprite[] diceFaces = new Sprite[7];
+
+        /// <summary>
+        /// A flat die face for the on-screen die: a white rounded tile with a slightly darker bottom edge (so it reads
+        /// as a chunky cube), dark pips, and a red pip for the one.
+        /// </summary>
+        public static Sprite DiceFace(int value)
+        {
+            if (diceFaces[value] != null) return diceFaces[value];
+            const int size = 160;
+            var tex = NewTexture(size);
+            var pixels = new Color[size * size];
+            var pips = PipPositions(value);
+            var pipColor = new Color(0.12f, 0.14f, 0.24f);
+            var onePip = new Color(0.86f, 0.14f, 0.14f);
+            float pipRadius = value == 1 ? 0.13f : 0.092f;
+            var edge = new Color(0.78f, 0.8f, 0.87f);
+            for (int j = 0; j < size; j++)
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    float x = (i + 0.5f) / size, y = (j + 0.5f) / size;
+                    float body = RoundedBox(x, y, 0.5f, 0.5f, 0.5f, 0.5f, 0.17f, size);
+                    var col = Color.Lerp(edge, Color.white, Mathf.Clamp01((y - 0.03f) * 10f));
+                    foreach (var p in pips)
+                    {
+                        // Pips sit slightly higher than centre so the darker bottom edge stays clear.
+                        float d = Vector2.Distance(new Vector2(x, y), new Vector2(p.x, 0.04f + p.y * 0.94f));
+                        col = Color.Lerp(col, value == 1 ? onePip : pipColor, Mathf.Clamp01((pipRadius - d) * size));
+                    }
+                    col.a = body;
+                    pixels[j * size + i] = col;
+                }
+            }
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return diceFaces[value] = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
 
         /// <summary>A white coin with a dark rim, set under a pawn so it stands out on any square.</summary>
         public static Texture2D Puck
