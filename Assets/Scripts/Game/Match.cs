@@ -42,7 +42,6 @@ namespace LudoGame
         Image toastBg;
         Button skipButton;
         float toastUntil;
-        int rotationSteps;
         bool awaitingRoll;
         bool rollRequested;
         bool picking;
@@ -80,15 +79,8 @@ namespace LudoGame
             bot = new Bot(rng);
             var seats = state.Seats;
 
-            // Turn the board so the first human player's base is bottom-left, like sitting at a real table.
-            rotationSteps = 0;
-            for (int p = 0; p < GameState.Players; p++)
-            {
-                if (seats[p] != SeatType.Human) continue;
-                rotationSteps = (3 - p + 4) % 4;
-                break;
-            }
-            board.SetRotationSteps(rotationSteps);
+            // The board always has the same layout: Blue bottom-left, then clockwise Red, Green, Yellow.
+            board.SetRotationSteps(0);
             board.SetShapesVisible(GameSettings.ColorShapes);
             PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
 
@@ -153,7 +145,7 @@ namespace LudoGame
             float lowest = 0f;
             for (int p = 0; p < GameState.Players; p++)
             {
-                int corner = (p + rotationSteps) % 4;
+                int corner = p; // Red top-left, Green top-right, Yellow bottom-right, Blue bottom-left
                 bool left = corner == 0 || corner == 3, top = corner == 0 || corner == 1;
                 var c = ToCanvas(rig.WorldToScreen(corners[corner]));
                 var pos = new Vector2(

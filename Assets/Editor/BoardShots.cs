@@ -84,7 +84,7 @@ namespace LudoGame.EditorTools
             rig.Frame();
             var board = new Board3D(null);
             created.Add(board.Root.gameObject);
-            board.SetRotationSteps(3); // Red at the bottom-left, as when Red is the local player
+            board.SetRotationSteps(0); // the fixed layout: Blue bottom-left, then clockwise Red, Green, Yellow
             // The pawn looks offered in Settings, the colour-blind shapes, and the edge-to-edge board.
             var styles = new (string name, PawnLook look, bool shapes, bool edge)[]
             {
