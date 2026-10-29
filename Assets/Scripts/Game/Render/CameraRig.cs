@@ -13,6 +13,9 @@ namespace LudoGame
     {
         /// <summary>Downward camera angle in degrees (90 = straight down). Lower shows more of the pawns' sides.</summary>
         public static float Pitch = 58f;
+
+        /// <summary>The 2D board is seen straight from above.</summary>
+        const float FlatPitch = 90f;
         const float FieldOfView = 30f;
 
         /// <summary>The furthest "zoom to choices" will move in: 1.7 times the normal size.</summary>
@@ -65,16 +68,16 @@ namespace LudoGame
         }
 
         /// <summary>Re-aims the camera after <see cref="Pitch"/> changes and refits the board.</summary>
-        public void ApplyPitch()
-        {
-            transform.rotation = Quaternion.Euler(Pitch, 0f, 0f);
-            Frame();
-        }
+        public void ApplyPitch() => Frame();
 
-        /// <summary>Moves the camera back until the whole board fits with room for the cards above and below it.</summary>
+        /// <summary>
+        /// Aims the camera (tilted at the 3D board, straight down at the 2D one), then moves it back until the whole
+        /// board fits with room for the cards above and below it.
+        /// </summary>
         public void Frame()
         {
             StopZoom();
+            transform.rotation = Quaternion.Euler(Board3D.Flat ? FlatPitch : Pitch, 0f, 0f);
             width = Screen.width;
             height = Screen.height;
             float near = 5f, far = 400f;

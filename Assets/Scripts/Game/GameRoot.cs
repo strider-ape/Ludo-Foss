@@ -241,6 +241,7 @@ namespace LudoGame
             rows.Cycle("When time runs out", new[] { "Skip turn", "Auto-play" }, () => GameSettings.TimerAutoPlays ? 1 : 0, i => GameSettings.TimerAutoPlays = i == 1);
             rows.Toggle("Resume unfinished game", () => GameSettings.ResumeGames, v => GameSettings.ResumeGames = v);
             rows.Header("LOOK");
+            rows.Toggle("2D board", () => GameSettings.FlatBoard, v => GameSettings.FlatBoard = v);
             rows.Cycle("Pawn style", new[] { "Classic", "Outline", "Outline + coin" }, () => (int)GameSettings.Pawns, i => GameSettings.Pawns = (PawnLook)i);
             rows.Toggle("Colour shapes", () => GameSettings.ColorShapes, v => GameSettings.ColorShapes = v);
             rows.Toggle("Flat 2D dice", () => GameSettings.FlatDice, v => GameSettings.FlatDice = v);
@@ -274,9 +275,10 @@ namespace LudoGame
             ShowMenu(); // refresh, e.g. CONTINUE appears or disappears with "Resume unfinished game"
         }
 
-        /// <summary>Thin edge-to-edge frame or the classic one, then refit the camera to it.</summary>
+        /// <summary>2D or 3D board, thin edge-to-edge frame or the classic one, then refit the camera to it.</summary>
         void ApplyBoardSize()
         {
+            board.SetFlat(GameSettings.FlatBoard);
             board.SetEdgeToEdge(GameSettings.EdgeToEdge);
             rig.Frame();
         }

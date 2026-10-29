@@ -85,16 +85,18 @@ namespace LudoGame.EditorTools
             var board = new Board3D(null);
             created.Add(board.Root.gameObject);
             board.SetRotationSteps(0); // the fixed layout: Blue bottom-left, then clockwise Red, Green, Yellow
-            // The pawn looks offered in Settings, the colour-blind shapes, and the edge-to-edge board.
-            var styles = new (string name, PawnLook look, bool shapes, bool edge)[]
+            // The pawn looks offered in Settings, the colour-blind shapes, the edge-to-edge board and the 2D board.
+            var styles = new (string name, PawnLook look, bool shapes, bool edge, bool flat)[]
             {
-                ("1-classic", PawnLook.Classic, false, false),
-                ("2-outline", PawnLook.Outline, false, false),
-                ("3-outline-coin", PawnLook.OutlineCoin, false, false),
-                ("4-outline-shapes", PawnLook.Outline, true, false),
-                ("5-edge-to-edge", PawnLook.Outline, false, true),
+                ("1-classic", PawnLook.Classic, false, false, false),
+                ("2-outline", PawnLook.Outline, false, false, false),
+                ("3-outline-coin", PawnLook.OutlineCoin, false, false, false),
+                ("4-outline-shapes", PawnLook.Outline, true, false, false),
+                ("5-edge-to-edge", PawnLook.Outline, false, true, false),
+                ("7-flat", PawnLook.Outline, false, true, true),
+                ("8-flat-shapes", PawnLook.Outline, true, true, true),
             };
-            var saved = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes);
+            var saved = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes, PawnStyle.Flat);
             var crops = new Dictionary<string, List<Texture2D>>();
             var fullShots = new List<Texture2D>();
             rig.ApplyPitch();
@@ -102,8 +104,9 @@ namespace LudoGame.EditorTools
             {
                 foreach (var style in styles)
                 {
-                    PawnStyle.Apply(style.look, style.shapes);
+                    PawnStyle.Apply(style.look, style.shapes, style.flat);
                     board.SetShapesVisible(style.shapes);
+                    board.SetFlat(style.flat);
                     board.SetEdgeToEdge(style.edge);
                     rig.Frame();
                     foreach (var (name, pieces) in layouts)
@@ -111,7 +114,7 @@ namespace LudoGame.EditorTools
                         var pawns = Place(board, pieces);
                         var shot = Capture(rig.Cam, target);
                         Save(shot, Path.Combine(folder, $"{style.name}-{name}.png"));
-                        if (name == "busy" && (style.name == "2-outline" || style.edge)) fullShots.Add(Capture(rig.Cam, target));
+                        if (name == "busy" && (style.name == "2-outline" || style.edge && !style.flat)) fullShots.Add(Capture(rig.Cam, target));
                         // A 1:1 crop of the bottom-left quarter of the board: how big things really are on a phone.
                         var crop = Crop(shot, rig, new Vector3(-Board3D.HalfExtent, 0f, 0f), new Vector3(0f, 0f, -Board3D.HalfExtent));
                         if (!crops.TryGetValue(name, out var list)) crops[name] = list = new List<Texture2D>();
@@ -122,20 +125,27 @@ namespace LudoGame.EditorTools
                     var cellPx = (rig.WorldToScreen(Vector3.zero) - rig.WorldToScreen(Vector3.right)).magnitude;
                     Debug.Log($"[Ludo] {style.name}: one cell = {cellPx:F0} px, pawn base = {cellPx * 0.78f * PawnStyle.Size:F0} px wide at {Width}x{Height}");
                 }
+                RenderFlatReference(folder, rig, target, board);
+
                 // "Zoom to choices": Red may move its pair on square 6 or its pawn on 17, with a roll of 4.
+                PawnStyle.Apply(PawnLook.Outline, false);
+                board.SetShapesVisible(false);
+                board.SetFlat(false);
+                board.SetEdgeToEdge(true);
+                rig.Frame();
                 {
                     var busy = layouts[1].pieces;
                     var pawns = Place(board, busy);
                     var points = new List<Vector3>();
-                    float height = 1.25f * PawnStyle.Size;
+                    var top = Pawn3D.TopOffset(1f);
                     foreach (var (token, progress) in new[] { (0, 6), (2, 17) })
                     {
                         var at = board.World(board.TokenLocal(PlayerColor.Red, token, progress));
                         var to = board.World(board.TokenLocal(PlayerColor.Red, token, progress + 4));
                         points.Add(at);
-                        points.Add(at + Vector3.up * height);
+                        points.Add(at + top);
                         points.Add(to);
-                        points.Add(to + Vector3.up * height);
+                        points.Add(to + top);
                     }
                     rig.ZoomToFit(points, 0f);
                     var focus = board.World(board.TokenLocal(PlayerColor.Red, 2, 17));
@@ -180,7 +190,8 @@ namespace LudoGame.EditorTools
             }
             finally
             {
-                (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes) = saved;
+                (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes, PawnStyle.Flat) = saved;
+                board.SetFlat(false);
                 board.SetEdgeToEdge(false);
                 foreach (var list in crops.Values)
                 {
@@ -233,6 +244,35 @@ namespace LudoGame.EditorTools
             }
         }
 
+        /// <summary>
+        /// The 2D board with the pawns where the printed-board picture it copies has them (one blue pawn out on
+        /// Red's side, one yellow pawn just past Yellow's start), cropped to the board, for a side-by-side check.
+        /// </summary>
+        static void RenderFlatReference(string folder, CameraRig rig, RenderTexture target, Board3D board)
+        {
+            const PlayerColor R = PlayerColor.Red, G = PlayerColor.Green, Y = PlayerColor.Yellow, B = PlayerColor.Blue;
+            var pieces = new[]
+            {
+                new Piece(R, 0, -1), new Piece(R, 1, -1), new Piece(R, 2, -1), new Piece(R, 3, -1),
+                new Piece(G, 0, -1), new Piece(G, 1, -1), new Piece(G, 2, -1), new Piece(G, 3, -1),
+                new Piece(Y, 0, -1), new Piece(Y, 1, -1), new Piece(Y, 2, -1), new Piece(Y, 3, 1),
+                new Piece(B, 0, -1), new Piece(B, 1, 7), new Piece(B, 2, -1), new Piece(B, 3, -1),
+            };
+            PawnStyle.Apply(PawnLook.Outline, false, true);
+            board.SetShapesVisible(false);
+            board.SetFlat(true);
+            board.SetEdgeToEdge(true);
+            rig.Frame();
+            var pawns = Place(board, pieces);
+            var shot = Capture(rig.Cam, target);
+            float h = Board3D.HalfExtent;
+            var crop = Crop(shot, rig, new Vector3(-h, 0f, h), new Vector3(h, 0f, -h));
+            Save(crop, Path.Combine(folder, "flat-reference.png"));
+            UnityEngine.Object.DestroyImmediate(crop);
+            UnityEngine.Object.DestroyImmediate(shot);
+            foreach (var pawn in pawns) UnityEngine.Object.DestroyImmediate(pawn.gameObject);
+        }
+
         /// <summary>Puts pawns on the board, fanning out pawns that share a square exactly like a match does.</summary>
         static List<Pawn3D> Place(Board3D board, Piece[] pieces)
         {
@@ -262,6 +302,8 @@ namespace LudoGame.EditorTools
                     pawn.ApplyBaseScale(PawnStyle.StackScale);
                 }
             }
+            // No frames run in the editor, so put the 2D board's pins in draw order here.
+            foreach (var pawn in pawns) pawn.SortPin();
             return pawns;
         }
 

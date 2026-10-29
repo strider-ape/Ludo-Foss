@@ -82,7 +82,7 @@ namespace LudoGame
             // The board always has the same layout: Blue bottom-left, then clockwise Red, Green, Yellow.
             board.SetRotationSteps(0);
             board.SetShapesVisible(GameSettings.ColorShapes);
-            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
+            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes, Board3D.Flat);
 
             pieces = new GameObject("Pieces").transform;
             pieces.SetParent(board.Root, false);
@@ -699,7 +699,7 @@ namespace LudoGame
         {
             for (int i = 0; i < stacks.Count && i < badges.Count; i++)
             {
-                var anchor = board.World(stacks[i].centre) + Vector3.up * (1.25f * PawnStyle.Size * PawnStyle.StackScale) + rig.transform.right * 0.6f;
+                var anchor = board.World(stacks[i].centre) + Pawn3D.TopOffset(PawnStyle.StackScale) + rig.transform.right * 0.6f;
                 badges[i].rt.anchoredPosition = ToCanvas(rig.WorldToScreen(anchor));
             }
         }
@@ -713,15 +713,15 @@ namespace LudoGame
         List<Vector3> ChoicePoints(List<Move> moves)
         {
             var points = new List<Vector3>();
-            float height = 1.25f * PawnStyle.Size;
+            var top = Pawn3D.TopOffset(1f);
             foreach (var m in moves)
             {
                 var at = pawns[(int)m.Player, m.Token].transform.position;
                 var to = board.World(board.TokenLocal(m.Player, m.Token, m.To));
                 points.Add(at);
-                points.Add(at + Vector3.up * height);
+                points.Add(at + top);
                 points.Add(to);
-                points.Add(to + Vector3.up * height);
+                points.Add(to + top);
             }
             return points;
         }
@@ -731,17 +731,21 @@ namespace LudoGame
         {
             // Swap the die now unless it's mid-roll; otherwise the next turn picks it up.
             if (!rolling && (dice is Dice2D) != GameSettings.FlatDice) CreateDie();
-            if (Board3D.EdgeToEdge != GameSettings.EdgeToEdge)
+            bool flatChanged = Board3D.Flat != GameSettings.FlatBoard;
+            if (flatChanged || Board3D.EdgeToEdge != GameSettings.EdgeToEdge)
             {
+                board.SetFlat(GameSettings.FlatBoard);
                 board.SetEdgeToEdge(GameSettings.EdgeToEdge);
-                rig.Frame(); // refits the camera and re-places the cards and die (Reframed -> LayoutUi)
+                rig.Frame(); // re-aims and refits the camera, and re-places the cards and die (Reframed -> LayoutUi)
             }
-            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes);
+            PawnStyle.Apply(GameSettings.Pawns, GameSettings.ColorShapes, Board3D.Flat);
             board.SetShapesVisible(GameSettings.ColorShapes);
             foreach (var pawn in pawns)
             {
                 if (pawn != null) pawn.RefreshStyle();
             }
+            // The 2D board's base slots sit in different spots, and its pins share squares at another size.
+            if (flatChanged) LayoutTokens(0f);
             foreach (var card in cards) card.SetShapeVisible(GameSettings.ColorShapes);
             PositionBadges();
         }

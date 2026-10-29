@@ -4,8 +4,9 @@ using UnityEngine;
 namespace LudoGame
 {
     /// <summary>
-    /// The 3D board: a rounded wooden frame with the playing surface on top. One board cell is one world unit,
-    /// the surface sits at y = 0, and the root can be turned in 90-degree steps so the local player's base is bottom-left.
+    /// The board: a rounded wooden frame with the playing surface on top, or the flat 2D board
+    /// (<see cref="FlatBoard"/>). One board cell is one world unit, the surface sits at y = 0, and the root can be
+    /// turned in 90-degree steps so the local player's base is bottom-left.
     /// </summary>
     public sealed class Board3D
     {
@@ -19,11 +20,16 @@ namespace LudoGame
         /// <summary>True when the board uses its thin rim and fills the screen width.</summary>
         public static bool EdgeToEdge { get; private set; }
 
+        /// <summary>True when the flat 2D board is shown instead of the 3D one.</summary>
+        public static bool Flat { get; private set; }
+
         /// <summary>Half the board's outer width, including the frame.</summary>
-        public static float HalfExtent => (EdgeToEdge ? ThinFrameSize : FrameSize) * 0.5f;
+        public static float HalfExtent => Flat ? FlatBoard.HalfExtent : (EdgeToEdge ? ThinFrameSize : FrameSize) * 0.5f;
 
         public readonly Transform Root;
 
+        GameObject classic;
+        GameObject flat;
         GameObject frame;
         GameObject thinFrame;
         Transform shapes;
@@ -33,8 +39,20 @@ namespace LudoGame
         {
             Root = new GameObject("Board").transform;
             Root.SetParent(parent, false);
+            classic = new GameObject("Classic");
+            classic.transform.SetParent(Root, false);
             Build();
             BuildShapes();
+            SetFlat(Flat);
+        }
+
+        /// <summary>Swaps between the 3D board and the flat 2D one (built the first time it's needed). Refit the camera afterwards.</summary>
+        public void SetFlat(bool on)
+        {
+            Flat = on;
+            if (on && flat == null) flat = FlatBoard.Build(Root);
+            if (flat != null) flat.SetActive(on);
+            classic.SetActive(!on);
         }
 
         public void SetRotationSteps(int clockwiseSteps)
@@ -100,11 +118,15 @@ namespace LudoGame
             return HomeSpot(color);
         }
 
-        public Vector3 BaseSlot(PlayerColor color, int token)
+        public Vector3 BaseSlot(PlayerColor color, int token) => BaseSlot(color, token, Flat);
+
+        /// <summary>Where a pawn waits in its base. The 2D board spaces the four slots a little further apart.</summary>
+        public static Vector3 BaseSlot(PlayerColor color, int token, bool flatBoard)
         {
             var o = BoardLayout.BaseOrigin(color);
-            float dx = token % 2 == 0 ? 1.75f : 3.25f;
-            float dy = token < 2 ? 1.75f : 3.25f;
+            float near = flatBoard ? 1.5f : 1.75f, far = flatBoard ? 3.5f : 3.25f;
+            float dx = token % 2 == 0 ? near : far;
+            float dy = token < 2 ? near : far;
             return Cell(o.X + dx, o.Y + dy);
         }
 
@@ -169,7 +191,7 @@ namespace LudoGame
                 inner.Quad(Cell(o.X + 2.5f, o.Y + 2.5f) + Vector3.up * DecalY, 4.1f, 4.1f, Color.white);
                 for (int t = 0; t < GameState.TokensPerPlayer; t++)
                 {
-                    slots.Quad(BaseSlot(c, t) + Vector3.up * SlotY, 1.05f, 1.05f, Palette.LightOf(c));
+                    slots.Quad(BaseSlot(c, t, false) + Vector3.up * SlotY, 1.05f, 1.05f, Palette.LightOf(c));
                 }
             }
             AddMesh("BaseInner", inner.Build("BaseInner"), Materials.Unlit(SpriteFactory.Rounded.texture, Color.white, true, 1), Vector3.zero);
@@ -187,7 +209,7 @@ namespace LudoGame
         GameObject AddMesh(string name, Mesh mesh, Material material, Vector3 localPos)
         {
             var go = new GameObject(name);
-            go.transform.SetParent(Root, false);
+            go.transform.SetParent(classic.transform, false);
             go.transform.localPosition = localPos;
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = material;

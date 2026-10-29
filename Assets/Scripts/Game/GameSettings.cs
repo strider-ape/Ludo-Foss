@@ -77,6 +77,13 @@ namespace LudoGame
             set => SetInt("flatDice", value ? 1 : 0);
         }
 
+        /// <summary>A flat, top-down 2D board with map-pin pawns instead of the 3D board.</summary>
+        public static bool FlatBoard
+        {
+            get => PlayerPrefs.GetInt("flatBoard", 0) == 1;
+            set => SetInt("flatBoard", value ? 1 : 0);
+        }
+
         /// <summary>Thin frame, no side margins: the board fills the screen width.</summary>
         public static bool EdgeToEdge
         {

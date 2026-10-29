@@ -28,6 +28,7 @@ Every helper below can be switched on or off in Settings:
 - **Play for all places**: after the winner, keep going for 2nd and 3rd and finish on a podium. **Skip to results** finishes a computers-only ending instantly
 - **Resume**: the game saves after every turn, so **Continue** picks up where you left off, even after the app was closed
 - **Turn timer** (off by default): 10, 15 or 30 seconds, shown as a ring around your avatar. When it runs out, the game either plays the move for you or skips the turn
+- **2D board** (off by default): a flat, top-down board in the classic printed style, with white squares and thin grey lines, outlined stars, an arrow into each home column and map-pin pawns. The 3D board stays the default
 - **Pawn style**: Outline (default: bigger pawns with a dark cartoon edge, easy to see on any square, including their own colour), Outline + coin, or Classic
 - **Flat 2D dice** (default): a big, face-on die that is always easy to read; switch to the 3D die in Settings
 - **Colour shapes** for colour-blind players: circle (red), triangle (green), square (yellow) and star (blue) on pawns, bases, home triangles and avatars
@@ -111,7 +112,7 @@ This checks the board geometry and rules, then plays 400 computer-only games.
 Builds\Windows\LudoFOSS.exe -screen-width 540 -screen-height 1170
 ```
 
-Add `-demo-capture <folder>` to have it play a computer-only match, save four screenshots and quit.
+Add `-demo-capture <folder>` to have it play a computer-only match, save four screenshots and quit. Add `-demo-flat` as well to play it on the 2D board.
 
 ## Install on your phone
 
@@ -131,6 +132,7 @@ Building it yourself instead? See [Build the APK](#build-the-apk); the file land
 
 - Speed and timing: `GameSettings.Scale` and the durations in `Match.cs`
 - Animations: `Render/Pawn3D.cs` (hops, captures) and `Render/Dice3D.cs` (the roll)
+- 2D board look (colours, lines, stars, map pins): `Render/FlatBoard.cs`
 - Rules: `Core/Rules.cs` (legal moves, captures, extra turns)
 - Bot behaviour: `Core/Bot.cs` (move scoring)
 - Settings screen: `GameRoot.OpenSettings`

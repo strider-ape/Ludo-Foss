@@ -5,8 +5,8 @@ namespace LudoGame
     {
         public const string Name = "Ludo FOSS";
         public const string AndroidId = "io.github.strider_ape.ludo";
-        public const string Version = "0.5.4";
-        public const int VersionCode = 11;
+        public const string Version = "0.5.5";
+        public const int VersionCode = 12;
 
         public static string FileName => Name.Replace(" ", "");
     }

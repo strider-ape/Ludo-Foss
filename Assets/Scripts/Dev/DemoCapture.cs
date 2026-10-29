@@ -10,10 +10,12 @@ namespace LudoGame
     /// Development aid: launch a desktop build with "-demo-capture &lt;folder&gt;" to save screenshots of the menu,
     /// settings, the move preview, a match and the results podium, then quit. Does nothing in normal play.
     /// Red is played by this script (rolling and picking like a person would) so the helpers appear.
+    /// Add "-demo-flat" to play on the 2D board.
     /// </summary>
     sealed class DemoCapture : MonoBehaviour
     {
         string folder;
+        bool flat;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Init()
@@ -21,7 +23,9 @@ namespace LudoGame
             var args = Environment.GetCommandLineArgs();
             int i = Array.IndexOf(args, "-demo-capture");
             if (i < 0 || i + 1 >= args.Length) return;
-            new GameObject("DemoCapture").AddComponent<DemoCapture>().folder = args[i + 1];
+            var demo = new GameObject("DemoCapture").AddComponent<DemoCapture>();
+            demo.folder = args[i + 1];
+            demo.flat = Array.IndexOf(args, "-demo-flat") >= 0;
         }
 
         IEnumerator Start()
@@ -34,7 +38,8 @@ namespace LudoGame
             root.DemoOpenSettings();
             yield return new WaitForSecondsRealtime(0.6f);
             yield return Capture("2-settings.png");
-            root.DemoCloseSettings();
+            GameSettings.FlatBoard = flat;
+            root.DemoCloseSettings(); // applies the board choice
 
             GameSettings.Speed = 4;
             GameSettings.AutoMove = false;

@@ -229,19 +229,25 @@ namespace LudoGame.EditorTools
             var board = new Board3D(null);
             created.Add(board.Root.gameObject);
             int taps = 0;
-            var savedStyle = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes);
+            var savedStyle = (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes, PawnStyle.Flat);
+            // Every 3D pawn look in every orientation, then the 2D board's pins (always the fixed layout).
+            var modes = new List<(bool flat, bool edge, PawnLook look, int rotation)>();
+            foreach (bool edge in new[] { false, true })
+            foreach (var look in new[] { PawnLook.Classic, PawnLook.Outline, PawnLook.OutlineCoin })
+            for (int rotation = 0; rotation < 4; rotation++) modes.Add((false, edge, look, rotation));
+            modes.Add((true, false, PawnLook.Outline, 0));
+            modes.Add((true, true, PawnLook.Outline, 0));
             try
             {
-                foreach (bool edge in new[] { false, true })
-                foreach (var look in new[] { PawnLook.Classic, PawnLook.Outline, PawnLook.OutlineCoin })
-                for (int rotation = 0; rotation < 4; rotation++)
+                foreach (var (flat, edge, look, rotation) in modes)
                 {
-                    if (Board3D.EdgeToEdge != edge || rotation == 0)
+                    if (Board3D.EdgeToEdge != edge || Board3D.Flat != flat || rotation == 0)
                     {
+                        board.SetFlat(flat);
                         board.SetEdgeToEdge(edge);
                         rig.Frame();
                     }
-                    PawnStyle.Apply(look, true);
+                    PawnStyle.Apply(look, true, flat);
                     board.SetRotationSteps(rotation);
                     foreach (var (name, pieces) in scenarios)
                     {
@@ -262,7 +268,7 @@ namespace LudoGame.EditorTools
                             {
                                 taps++;
                                 var picked = PawnPicker.Pick(tap, pawns, rig, reach);
-                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, {look} pawns, reach {reach}, edge-to-edge {edge}, board turned {rotation * 90} deg) picked "
+                                Check(picked == pawn, $"tap on {pawn.Color} pawn {pawn.Index} ({name}, {(flat ? "2D board" : look + " pawns")}, reach {reach}, edge-to-edge {edge}, board turned {rotation * 90} deg) picked "
                                     + (picked == null ? "nothing" : $"{picked.Color} pawn {picked.Index}"));
                             }
                         }
@@ -274,6 +280,7 @@ namespace LudoGame.EditorTools
                 }
 
                 // Generous taps reach further: a tap about 1.2 squares beside a lone glowing pawn.
+                board.SetFlat(false);
                 board.SetEdgeToEdge(true);
                 rig.Frame();
                 board.SetRotationSteps(0);
@@ -291,7 +298,8 @@ namespace LudoGame.EditorTools
             }
             finally
             {
-                (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes) = savedStyle;
+                (PawnStyle.Size, PawnStyle.Outline, PawnStyle.Coin, PawnStyle.StackScale, PawnStyle.Shapes, PawnStyle.Flat) = savedStyle;
+                board.SetFlat(false);
                 board.SetEdgeToEdge(false);
                 foreach (var o in created) UnityEngine.Object.DestroyImmediate(o);
             }

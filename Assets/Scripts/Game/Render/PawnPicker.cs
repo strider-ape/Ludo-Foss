@@ -40,7 +40,7 @@ namespace LudoGame
         public static void ScreenSpan(Pawn3D pawn, CameraRig rig, out Vector2 foot, out Vector2 head)
         {
             foot = rig.WorldToScreen(pawn.Body.position);
-            head = rig.WorldToScreen(pawn.Body.position + Vector3.up * 1.1f * pawn.BaseScale);
+            head = rig.WorldToScreen(pawn.HeadPosition);
         }
 
         static float DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)

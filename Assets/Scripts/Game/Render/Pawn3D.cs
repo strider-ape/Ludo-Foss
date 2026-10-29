@@ -22,21 +22,25 @@ namespace LudoGame
         /// <summary>The colour-blind shape (circle, triangle, square, star) on each pawn's head.</summary>
         public static bool Shapes;
 
+        /// <summary>Flat map pins for the 2D board instead of 3D pawns (the pawn look doesn't apply).</summary>
+        public static bool Flat;
+
         /// <summary>Sets the style from the player's settings.</summary>
-        public static void Apply(PawnLook look, bool shapes)
+        public static void Apply(PawnLook look, bool shapes, bool flat = false)
         {
             bool classic = look == PawnLook.Classic;
-            Size = classic ? 1.25f : 1.45f;
-            Outline = !classic;
-            Coin = look == PawnLook.OutlineCoin;
-            StackScale = classic ? 0.75f : 0.85f;
+            Flat = flat;
+            Size = flat ? 1f : classic ? 1.25f : 1.45f;
+            Outline = !flat && !classic;
+            Coin = !flat && look == PawnLook.OutlineCoin;
+            StackScale = flat ? 0.78f : classic ? 0.75f : 0.85f;
             Shapes = shapes;
         }
     }
 
     /// <summary>
-    /// A glossy 3D pawn. The root slides over the board; the body hops, squashes and spins; a soft shadow and
-    /// a pulsing ring stay flat on the board.
+    /// A glossy 3D pawn, or a flat map pin on the 2D board. The root slides over the board; the body hops, squashes
+    /// and spins; a soft shadow (a dark ring on the 2D board) and a pulsing ring stay flat on the board.
     /// </summary>
     public sealed class Pawn3D : MonoBehaviour
     {
@@ -49,7 +53,19 @@ namespace LudoGame
         static Material ringMaterial;
         static Material outlineMaterial;
         static Material coinMaterial;
+        static Material footMaterial;
         static readonly Material[] shapeMaterials = new Material[GameState.Players];
+        static readonly Material[] pinMaterials = new Material[GameState.Players];
+        static readonly Material[] pinShapeMaterials = new Material[GameState.Players];
+
+        /// <summary>
+        /// Draw order on the 2D board: pins above the board, the ring and the highlight; lower pins in front of higher
+        /// ones (a pin leans up into the square above); pins in mid-hop in front of everything.
+        /// </summary>
+        const int FootOrder = 1, HighlightOrder = 2, PinOrder = 1000, AirborneOrder = 600;
+
+        /// <summary>On the 2D board a hop lifts the pin up the screen by this much of its 3D height.</summary>
+        const float FlatLift = 0.5f;
 
         public PlayerColor Color { get; private set; }
         public int Index { get; private set; }
@@ -63,11 +79,23 @@ namespace LudoGame
         Transform shadow;
         Transform ring;
         Transform decorations;
+        Vector3 shadowOffset;
+        MeshRenderer bodyRenderer;
+        MeshRenderer shadowRenderer;
         MeshRenderer ringRenderer;
+        MeshRenderer pinRenderer;
+        MeshRenderer pinShapeRenderer;
         MaterialPropertyBlock block;
         bool selectable;
 
         public bool IsSelectable => selectable;
+
+        /// <summary>The middle of the pawn's head (the pin's ball on the 2D board), in world space.</summary>
+        public Vector3 HeadPosition => Body.position + (PawnStyle.Flat ? Vector3.forward * FlatBoard.PinHeadY : Vector3.up * 1.1f) * BaseScale;
+
+        /// <summary>From a pawn's foot to the top of its head, at the given scale: up, or up the screen on the 2D board.</summary>
+        public static Vector3 TopOffset(float scale) =>
+            PawnStyle.Flat ? Vector3.forward * ((FlatBoard.PinHeadY + FlatBoard.PinRadius) * scale) : Vector3.up * (1.25f * PawnStyle.Size * scale);
 
         public static Pawn3D Create(Transform parent, PlayerColor color, int index)
         {
@@ -91,6 +119,7 @@ namespace LudoGame
             }
             shadowMaterial = Materials.Unlit(SpriteFactory.RadialShadow, new UnityEngine.Color(0f, 0f, 0f, 0.42f), true, 5);
             ringMaterial = Materials.Unlit(SpriteFactory.Ring.texture, UnityEngine.Color.white, true, 6);
+            footMaterial = Materials.Unlit(SpriteFactory.Ring.texture, FlatBoard.FootRing, true, 5);
         }
 
         static Vector2[] BuildProfile()
@@ -122,25 +151,43 @@ namespace LudoGame
             var body = new GameObject("Body");
             body.transform.SetParent(transform, false);
             body.AddComponent<MeshFilter>().sharedMesh = bodyMesh;
-            body.AddComponent<MeshRenderer>().sharedMaterial = bodyMaterials[(int)color];
+            bodyRenderer = body.AddComponent<MeshRenderer>();
+            bodyRenderer.sharedMaterial = bodyMaterials[(int)color];
             Body = body.transform;
-            BuildDecorations();
 
             // The shadow falls away from the light, in world space regardless of how the board is turned.
             var away = new Vector3(-Materials.LightDir.x, 0f, -Materials.LightDir.z) * 0.12f;
-            shadow = MakeQuad("Shadow", shadowMaterial, 0.05f, ShadowSize);
-            shadow.localPosition += transform.parent != null ? transform.parent.InverseTransformDirection(away) : away;
+            shadowOffset = transform.parent != null ? transform.parent.InverseTransformDirection(away) : away;
+            shadow = MakeQuad("Shadow", shadowMaterial, 0.05f, 1f);
+            shadowRenderer = shadow.GetComponent<MeshRenderer>();
             ring = MakeQuad("Ring", ringMaterial, 0.06f, 1.3f * Size);
             ringRenderer = ring.GetComponent<MeshRenderer>();
             ringRenderer.enabled = false;
+            BuildDecorations();
             ApplyBaseScale(1f);
         }
 
-        /// <summary>Outline, coin and colour shape, all riding on the body so they hop and tumble with it.</summary>
+        /// <summary>
+        /// Outline, coin and colour shape, all riding on the body so they hop and tumble with it. On the 2D board the
+        /// body is a map pin instead, standing on a dark ring.
+        /// </summary>
         void BuildDecorations()
         {
             decorations = new GameObject("Decorations").transform;
             decorations.SetParent(Body, false);
+            bool flat = PawnStyle.Flat;
+            bodyRenderer.enabled = !flat;
+            shadowRenderer.sharedMaterial = flat ? footMaterial : shadowMaterial;
+            shadow.localPosition = new Vector3(0f, 0.05f, 0f) + (flat ? Vector3.zero : shadowOffset);
+            shadowRenderer.sortingOrder = flat ? FootOrder : 0;
+            ringRenderer.sortingOrder = flat ? HighlightOrder : 0;
+            pinRenderer = null;
+            pinShapeRenderer = null;
+            if (flat)
+            {
+                BuildPin();
+                return;
+            }
             if (PawnStyle.Outline)
             {
                 if (outlineMaterial == null) outlineMaterial = Materials.Outline(new UnityEngine.Color(0.07f, 0.09f, 0.19f), 0.035f);
@@ -164,14 +211,35 @@ namespace LudoGame
             }
         }
 
-        void AddDecal(string name, Material material, float y, float size)
+        /// <summary>The map pin lying flat on the board, its tip on the pawn's spot and its head pointing up the screen.</summary>
+        void BuildPin()
+        {
+            int c = (int)Color;
+            if (pinMaterials[c] == null) pinMaterials[c] = Materials.Unlit(FlatBoard.Pin(Color), UnityEngine.Color.white, true, 10);
+            var centre = new Vector3(FlatBoard.PinLeft + FlatBoard.PinWidth * 0.5f, 0.08f, FlatBoard.PinBottom + FlatBoard.PinHeight * 0.5f);
+            pinRenderer = AddDecal("Pin", pinMaterials[c], centre, new Vector3(FlatBoard.PinWidth, 1f, FlatBoard.PinHeight));
+            if (PawnStyle.Shapes)
+            {
+                // Same queue as the pin, so the draw order keeps the shape just above its own pin.
+                if (pinShapeMaterials[c] == null) pinShapeMaterials[c] = Materials.Unlit(SpriteFactory.ShapeOf(Color).texture, UnityEngine.Color.white, true, 10);
+                pinShapeRenderer = AddDecal("Shape", pinShapeMaterials[c], new Vector3(0f, 0.09f, FlatBoard.PinHeadY), new Vector3(0.34f, 1f, 0.34f));
+            }
+            SortPin();
+        }
+
+        void AddDecal(string name, Material material, float y, float size) =>
+            AddDecal(name, material, new Vector3(0f, y, 0f), new Vector3(size, 1f, size));
+
+        MeshRenderer AddDecal(string name, Material material, Vector3 position, Vector3 scale)
         {
             var go = new GameObject(name);
             go.transform.SetParent(decorations, false);
-            go.transform.localPosition = new Vector3(0f, y, 0f);
-            go.transform.localScale = new Vector3(size, 1f, size);
+            go.transform.localPosition = position;
+            go.transform.localScale = scale;
             go.AddComponent<MeshFilter>().sharedMesh = quad;
-            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            return renderer;
         }
 
         /// <summary>Rebuilds outline, coin, shape and size after the pawn style setting changes.</summary>
@@ -182,7 +250,22 @@ namespace LudoGame
             ApplyBaseScale(BaseScale);
         }
 
-        float ShadowSize => 1.05f * Size * BaseScale;
+        /// <summary>Keeps lower pins in front of higher ones on the 2D board, and a pin in mid-hop in front of all.</summary>
+        public void SortPin()
+        {
+            if (pinRenderer == null) return;
+            int order = PinOrder + Mathf.RoundToInt(-transform.position.z * 20f) + (Body.localPosition.z > 0.1f ? AirborneOrder : 0);
+            if (pinRenderer.sortingOrder == order) return;
+            pinRenderer.sortingOrder = order;
+            if (pinShapeRenderer != null) pinShapeRenderer.sortingOrder = order + 1;
+        }
+
+        void LateUpdate() => SortPin();
+
+        /// <summary>Raises the body off the board: straight up, or up the screen on the 2D board.</summary>
+        void Lift(float height) => Body.localPosition = PawnStyle.Flat ? new Vector3(0f, 0f, height * FlatLift) : new Vector3(0f, height, 0f);
+
+        float ShadowSize => PawnStyle.Flat ? 0.85f * BaseScale : 1.05f * Size * BaseScale;
 
         Transform MakeQuad(string name, Material material, float y, float size)
         {
@@ -209,16 +292,19 @@ namespace LudoGame
             float pulse = 0.5f + 0.5f * Mathf.Sin(t * 6f);
             float s = (1.2f + 0.18f * pulse) * BaseScale * Size;
             ring.localScale = new Vector3(s, 1f, s);
-            block.SetColor("_Color", new UnityEngine.Color(1f, 1f, 1f, 0.5f + 0.5f * pulse));
+            // White glows on the 3D board's colours; the 2D board is mostly white, so the ring is dark there.
+            var glow = PawnStyle.Flat ? new UnityEngine.Color(0.08f, 0.1f, 0.22f, 0.45f + 0.45f * pulse) : new UnityEngine.Color(1f, 1f, 1f, 0.5f + 0.5f * pulse);
+            block.SetColor("_Color", glow);
             ringRenderer.SetPropertyBlock(block);
-            Body.localPosition = new Vector3(0f, 0.14f * Mathf.Abs(Mathf.Sin(t * 4f)), 0f);
+            Lift(0.14f * Mathf.Abs(Mathf.Sin(t * 4f)));
         }
 
+        /// <summary>Stretches the body along its height: straight up, or up the screen for a pin on the 2D board.</summary>
         void SetShape(float stretch)
         {
             float scale = BaseScale * Size;
-            float xz = scale / Mathf.Sqrt(stretch);
-            Body.localScale = new Vector3(xz, scale * stretch, xz);
+            float across = scale / Mathf.Sqrt(stretch);
+            Body.localScale = PawnStyle.Flat ? new Vector3(across, scale, scale * stretch) : new Vector3(across, scale * stretch, across);
         }
 
         /// <summary>One hop to the next square: an arc with a stretch in the air and a squash on landing.</summary>
@@ -238,7 +324,7 @@ namespace LudoGame
                 float k = Mathf.Clamp01(t / duration);
                 float arc = Ease.Arc(k);
                 transform.localPosition = Vector3.Lerp(from, to, Ease.Smooth(k));
-                Body.localPosition = new Vector3(0f, arc * height, 0f);
+                Lift(arc * height);
                 SetShape(1f + 0.14f * arc);
                 float shadowSize = ShadowSize * (1f - 0.35f * arc);
                 shadow.localScale = new Vector3(shadowSize, 1f, shadowSize);
@@ -273,14 +359,15 @@ namespace LudoGame
             }
             FrameGovernor.Keep(duration + 0.25f);
             var from = transform.localPosition;
-            var axis = new Vector3(Random.Range(-1f, 1f), 0.2f, Random.Range(-1f, 1f)).normalized;
+            // A flat pin spins in the board's plane; a 3D pawn tumbles.
+            var axis = PawnStyle.Flat ? Vector3.up : new Vector3(Random.Range(-1f, 1f), 0.2f, Random.Range(-1f, 1f)).normalized;
             float t = 0f;
             while (t < duration)
             {
                 t += Time.deltaTime;
                 float k = Mathf.Clamp01(t / duration);
                 transform.localPosition = Vector3.Lerp(from, to, Ease.Smooth(k));
-                Body.localPosition = new Vector3(0f, Ease.Arc(k) * height, 0f);
+                Lift(Ease.Arc(k) * height);
                 Body.localRotation = Quaternion.AngleAxis(720f * Ease.OutQuad(k), axis);
                 yield return null;
             }
